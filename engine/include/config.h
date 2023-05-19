@@ -23,6 +23,18 @@
 #ifndef _HAVE_CONFIG_H
 #define _HAVE_CONFIG_H
 
+//======================== For IgorFuzz ========================//
+
+#define IGORFUZZ_FEATURE_ENABLE 1
+
+#define IGORFUZZ_CALLSTACK_ENV_SHUTDOWN "IGORFUZZ_NOCALSTK"
+#define IGORFUZZ_CALLSTACK_ENV_TOOLPATH "IGORFUZZ_TOOLPATH"
+#define IGORFUZZ_CALLSTACK_ENV_FILEPATH "IGORFUZZ_FILEPATH"
+#define IGORFUZZ_CALLSTACK_DEFAULT_TOOL "/usr/bin/addr2line"
+#define IGORFUZZ_CALLSTACK_DEFAULT_MODE 0666
+
+//==============================================================//
+
 /* Version string: */
 
 // c = release, a = volatile github dev, e = experimental branch
