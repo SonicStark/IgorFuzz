@@ -102,7 +102,7 @@ endif
 
 PASSES       = ./afl-gcc-pass.so ./afl-gcc-cmplog-pass.so ./afl-gcc-cmptrs-pass.so
 
-PROGS        = $(PASSES) ./afl-compiler-rt.o ./afl-compiler-rt-32.o ./afl-compiler-rt-64.o
+PROGS        = $(PASSES) ./afl-compiler-rt.o ./afl-compiler-rt-32.o ./afl-compiler-rt-64.o ./afl-igorfuzz-rt.o ./afl-igorfuzz-rt-32.o ./afl-igorfuzz-rt-64.o
 
 .PHONY: all
 all: test_shm test_deps $(PROGS) test_build all_done
@@ -141,6 +141,17 @@ afl-common.o: ./src/afl-common.c
 
 ./afl-compiler-rt-64.o: instrumentation/afl-compiler-rt.o.c
 	@printf "[*] Building 64-bit variant of the runtime (-m64)... "
+	@$(CC) $(CFLAGS_SAFE) $(CPPFLAGS) -O3 -Wno-unused-result -m64 -fPIC -c $< -o $@ 2>/dev/null; if [ "$$?" = "0" ]; then echo "success!"; else echo "failed (that's fine)"; fi
+
+./afl-igorfuzz-rt.o: instrumentation/afl-igorfuzz-rt.o.c
+	$(CC) $(CFLAGS_SAFE) $(CPPFLAGS) -O3 -Wno-unused-result -fPIC -c $< -o $@
+
+./afl-igorfuzz-rt-32.o: instrumentation/afl-igorfuzz-rt.o.c
+	@printf "[*] Building 32-bit variant of IgorFuzz runtime (-m32)... "
+	@$(CC) $(CFLAGS_SAFE) $(CPPFLAGS) -O3 -Wno-unused-result -m32 -fPIC -c $< -o $@ 2>/dev/null; if [ "$$?" = "0" ]; then echo "success!"; else echo "failed (that's fine)"; fi
+
+./afl-igorfuzz-rt-64.o: instrumentation/afl-igorfuzz-rt.o.c
+	@printf "[*] Building 64-bit variant of IgorFuzz runtime (-m64)... "
 	@$(CC) $(CFLAGS_SAFE) $(CPPFLAGS) -O3 -Wno-unused-result -m64 -fPIC -c $< -o $@ 2>/dev/null; if [ "$$?" = "0" ]; then echo "success!"; else echo "failed (that's fine)"; fi
 
 $(PASSES): instrumentation/afl-gcc-common.h
