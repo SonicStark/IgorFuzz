@@ -651,6 +651,64 @@ void read_foreign_testcases(afl_state_t *afl, int first) {
 
 }
 
+#if IGORFUZZ_FEATURE_ENABLE
+/* Read the input testcase, then queue it for IgorFuzz.
+   Called at startup just like read_testcases */
+void read_the_testcase(afl_state_t *afl) {
+  ACTF("Reading '%s'...", afl->in_file);
+
+  u8 val_buf[2][STRINGIFY_VAL_SIZE_MAX];
+  struct stat st;
+
+  if (lstat(afl->in_file, &st) || access(afl->in_file, R_OK)) {
+
+    PFATAL("Unable to access '%s'", afl->in_file);
+
+  }
+  if (!S_ISREG(st.st_mode) || !st.st_size) {
+
+    SAYF("\n" cLRD "[-] " cRST
+          "The input test case does not seem to be valid - try again.\n"
+          "    IgorFuzz needs a test case to start with - ideally, a small file "
+          "under 1 kB\n"
+          "    or so. The case must be stored as regular file.\n");
+    FATAL("Not a usable test case: '%s'", afl->in_file);
+
+  }
+  if (st.st_size > MAX_FILE) {
+
+    WARNF("Test case '%s' is too big (%s, limit is %s), partial reading",
+          afl->in_file,
+          stringify_mem_size(val_buf[0], sizeof(val_buf[0]), st.st_size),
+          stringify_mem_size(val_buf[1], sizeof(val_buf[1]), MAX_FILE));
+
+  }
+  add_to_queue(afl, afl->in_file, st.st_size >= MAX_FILE ? MAX_FILE : st.st_size, 0);
+
+  if (unlikely(afl->shm.cmplog_mode)) {
+    if (afl->cmplog_lvl == 1) {
+      if (!afl->cmplog_max_filesize ||
+          afl->cmplog_max_filesize < st.st_size) {
+        afl->cmplog_max_filesize = st.st_size;
+      }
+    } else if (afl->cmplog_lvl == 2) {
+      if (!afl->cmplog_max_filesize ||
+          afl->cmplog_max_filesize > st.st_size) {
+        afl->cmplog_max_filesize = st.st_size;
+      }
+    }
+    if (afl->cmplog_max_filesize < 1024) {
+      afl->cmplog_max_filesize = 1024;
+    } else {
+      afl->cmplog_max_filesize = (((afl->cmplog_max_filesize >> 10) + 1) << 10);
+    }
+  }
+
+  afl->last_find_time = 0;
+  afl->queued_at_start = afl->queued_items;
+}
+#endif // IGORFUZZ_FEATURE_ENABLE
+
 /* Read all testcases from the input directory, then queue them for testing.
    Called at startup. */
 
@@ -1404,7 +1462,13 @@ u32 find_start_position(afl_state_t *afl) {
 
   } else {
 
+#if IGORFUZZ_FEATURE_ENABLE
+    // Input of IgorFuzz is a single file. If not in_place_resume,
+    // in_dir will always be null pointer. Nothing can be found.
+    return 0;
+#else
     fn = alloc_printf("%s/../fuzzer_stats", afl->in_dir);
+#endif
 
   }
 
@@ -1446,7 +1510,12 @@ void find_timeout(afl_state_t *afl) {
 
   } else {
 
+#if IGORFUZZ_FEATURE_ENABLE
+    // The same, but for timeouts.
+    return;
+#else
     fn = alloc_printf("%s/../fuzzer_stats", afl->in_dir);
+#endif
 
   }
 
@@ -1598,7 +1667,7 @@ dir_cleanup_failed:
 
 /* Delete fuzzer output directory if we recognize it as ours, if the fuzzer
    is not currently running, and if the last run time isn't too great.
-   Resume fuzzing if `-` is set as in_dir or if AFL_AUTORESUME is set */
+   Resume fuzzing if `-` is set as in_file (or in_dir) or if AFL_AUTORESUME is set */
 
 static void handle_existing_out_dir(afl_state_t *afl) {
 

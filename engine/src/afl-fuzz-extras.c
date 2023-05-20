@@ -762,6 +762,15 @@ void save_auto(afl_state_t *afl) {
 
 void load_auto(afl_state_t *afl) {
 
+#if IGORFUZZ_FEATURE_ENABLE
+  // When using IgorFuzz, "-i" option indicates the input file
+  // rather than dir. So in_dir may always be null pointer.
+  if (!afl->in_dir) {
+    ACTF("No auto-generated dictionary tokens to reuse.");
+    return;
+  }
+#endif
+
   u32 i;
 
   for (i = 0; i < USE_AUTO_EXTRAS; ++i) {

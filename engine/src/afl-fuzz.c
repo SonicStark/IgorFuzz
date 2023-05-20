@@ -606,11 +606,19 @@ int main(int argc, char **argv_orig, char **envp) {
 
       case 'i':                                                /* input dir */
 
+#if IGORFUZZ_FEATURE_ENABLE
+        if (afl->in_file) { FATAL("Multiple -i options not supported"); }
+        if (optarg == NULL) { FATAL("Invalid -i option (got NULL)."); }
+        afl->in_file = optarg;
+
+        if (!strcmp(afl->in_file, "-")) { afl->in_place_resume = 1; }
+#else
         if (afl->in_dir) { FATAL("Multiple -i options not supported"); }
         if (optarg == NULL) { FATAL("Invalid -i option (got NULL)."); }
         afl->in_dir = optarg;
 
         if (!strcmp(afl->in_dir, "-")) { afl->in_place_resume = 1; }
+#endif
 
         break;
 
@@ -1247,7 +1255,11 @@ int main(int argc, char **argv_orig, char **envp) {
 
   }
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (optind == argc || !afl->in_file || !afl->out_dir || show_help) {
+#else
   if (optind == argc || !afl->in_dir || !afl->out_dir || show_help) {
+#endif
 
     usage(argv[0], show_help);
 
@@ -1404,10 +1416,15 @@ int main(int argc, char **argv_orig, char **envp) {
 
   }
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (!strcmp(afl->in_file, afl->out_dir)) {
+
+    FATAL("Input and output paths can't be the same");
+#else
   if (!strcmp(afl->in_dir, afl->out_dir)) {
 
     FATAL("Input and output directories can't be the same");
-
+#endif
   }
 
   if (afl->non_instrumented_mode) {
@@ -1833,8 +1850,15 @@ int main(int argc, char **argv_orig, char **envp) {
 
   setup_cmdline_file(afl, argv + optind);
 
+#if IGORFUZZ_FEATURE_ENABLE
+  // If not in_place_resume, we only need to read one input file.
+  // Or in_dir will have been set to out_dir within setup_dirs_fds.
+  if (!afl->in_place_resume) read_the_testcase(afl);
+                     else read_testcases(afl, NULL);
+#else
   read_testcases(afl, NULL);
   // read_foreign_testcases(afl, 1); for the moment dont do this
+#endif
   OKF("Loaded a total of %u seeds.", afl->queued_items);
 
   pivot_inputs(afl);

@@ -481,6 +481,9 @@ typedef struct afl_state {
   s32    key_lv;
 
   u8 *in_dir,                           /* Input directory with test cases  */
+#if IGORFUZZ_FEATURE_ENABLE
+     *in_file,                          /* The input file to run IgorFuzz   */
+#endif
       *out_dir,                         /* Working & output directory       */
       *tmp_dir,                         /* Temporary directory for input    */
       *sync_dir,                        /* Synchronization directory        */
@@ -1170,6 +1173,9 @@ u8   fuzz_one(afl_state_t *);
 
 #ifdef HAVE_AFFINITY
 void bind_to_free_cpu(afl_state_t *);
+#endif
+#if IGORFUZZ_FEATURE_ENABLE
+void read_the_testcase(afl_state_t *);
 #endif
 void   setup_post(afl_state_t *);
 void   read_testcases(afl_state_t *, u8 *);
