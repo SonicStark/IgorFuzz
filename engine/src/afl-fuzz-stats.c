@@ -328,15 +328,24 @@ void write_stats_file(afl_state_t *afl, u32 t_bytes, double bitmap_cvg,
       afl->unicorn_mode ? "unicorn" : "", afl->fsrv.qemu_mode ? "qemu " : "",
       afl->fsrv.cs_mode ? "coresight" : "",
       afl->non_instrumented_mode ? " non_instrumented " : "",
-      afl->no_forkserver ? "no_fsrv " : "", afl->crash_mode ? "crash " : "",
+      afl->no_forkserver ? "no_fsrv " : "",
+#if IGORFUZZ_FEATURE_ENABLE
+      "igor",
+#else
+      afl->crash_mode ? "crash " : "",
+#endif
       afl->persistent_mode ? "persistent " : "",
       afl->shmem_testcase_mode ? "shmem_testcase " : "",
       afl->deferred_mode ? "deferred " : "",
+#if IGORFUZZ_FEATURE_ENABLE
+      "",
+#else
       (afl->unicorn_mode || afl->fsrv.qemu_mode || afl->fsrv.cs_mode ||
        afl->non_instrumented_mode || afl->no_forkserver || afl->crash_mode ||
        afl->persistent_mode || afl->deferred_mode)
           ? ""
           : "default",
+#endif
       afl->orig_cmdline);
 
   /* ignore errors */
@@ -736,8 +745,14 @@ void show_stats_normal(afl_state_t *afl) {
     char *si = "";
     if (afl->sync_id) { si = afl->sync_id; }
     memset(banner, 0, sizeof(banner));
+
+#if IGORFUZZ_FEATURE_ENABLE
+    banner_len = 20 + strlen(VERSION) + strlen(si) +
+                 strlen(afl->power_name) + 4 + 6;
+#else
     banner_len = (afl->crash_mode ? 20 : 18) + strlen(VERSION) + strlen(si) +
                  strlen(afl->power_name) + 4 + 6;
+#endif
 
     if (strlen(afl->use_banner) + banner_len > 75) {
 
@@ -755,8 +770,12 @@ void show_stats_normal(afl_state_t *afl) {
 
       snprintf(banner + banner_pad, sizeof(banner) - banner_pad,
                "%s " cLCY VERSION cLBL " {%s} " cLGN "(%s) " cPIN "[%s] - Nyx",
+# if IGORFUZZ_FEATURE_ENABLE
+               cPIN "IgorFuzz",
+# else
                afl->crash_mode ? cPIN "peruvian were-rabbit"
                                : cYEL "american fuzzy lop",
+# endif
                si, afl->use_banner, afl->power_name);
 
     } else {
@@ -764,8 +783,12 @@ void show_stats_normal(afl_state_t *afl) {
 #endif
       snprintf(banner + banner_pad, sizeof(banner) - banner_pad,
                "%s " cLCY VERSION cLBL " {%s} " cLGN "(%s) " cPIN "[%s]",
+#if IGORFUZZ_FEATURE_ENABLE
+               cPIN "IgorFuzz",
+#else
                afl->crash_mode ? cPIN "peruvian were-rabbit"
                                : cYEL "american fuzzy lop",
+#endif
                si, afl->use_banner, afl->power_name);
 
 #ifdef __linux__
@@ -849,9 +872,13 @@ void show_stats_normal(afl_state_t *afl) {
   /* We want to warn people about not seeing new paths after a full cycle,
      except when resuming fuzzing or running in non-instrumented mode. */
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (1) {
+#else
   if (!afl->non_instrumented_mode &&
       (afl->last_find_time || afl->resuming_fuzz || afl->queue_cycle == 1 ||
        afl->in_bitmap || afl->crash_mode)) {
+#endif
 
     u_stringify_time_diff(time_tmp, cur_ms, afl->last_find_time);
     SAYF(bV bSTOP "   last new find : " cRST "%-33s ", time_tmp);
@@ -963,7 +990,11 @@ void show_stats_normal(afl_state_t *afl) {
           u_stringify_int(IB(1), afl->saved_crashes),
           (afl->saved_crashes >= KEEP_UNIQUE_CRASH) ? "+" : "");
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (1) {
+#else
   if (afl->crash_mode) {
+#endif
 
     SAYF(bV bSTOP " total execs : " cRST "%-22s " bSTG bV bSTOP
                   "   new crashes : %s%-20s" bSTG         bV "\n",
@@ -1540,8 +1571,14 @@ void show_stats_pizza(afl_state_t *afl) {
     char *si = "";
     if (afl->sync_id) { si = afl->sync_id; }
     memset(banner, 0, sizeof(banner));
+
+#if IGORFUZZ_FEATURE_ENABLE
+    banner_len = 20 + strlen(VERSION) + strlen(si) +
+                 strlen(afl->power_name) + 4 + 6;
+#else
     banner_len = (afl->crash_mode ? 20 : 18) + strlen(VERSION) + strlen(si) +
                  strlen(afl->power_name) + 4 + 6;
+#endif
 
     if (strlen(afl->use_banner) + banner_len > 75) {
 
@@ -1559,9 +1596,13 @@ void show_stats_pizza(afl_state_t *afl) {
 
       snprintf(banner + banner_pad, sizeof(banner) - banner_pad,
                "%s " cLCY VERSION cLBL " {%s} " cLGN "(%s) " cPIN "[%s] - Nyx",
+# if IGORFUZZ_FEATURE_ENABLE
+               cPIN "Mozzarbella Pizzeria - IgorFuzz",
+# else
                afl->crash_mode ? cPIN
                    "Mozzarbella Pizzeria table booking system"
                                : cYEL "Mozzarbella Pizzeria management system",
+# endif
                si, afl->use_banner, afl->power_name);
 
     } else {
@@ -1569,9 +1610,13 @@ void show_stats_pizza(afl_state_t *afl) {
 #endif
       snprintf(banner + banner_pad, sizeof(banner) - banner_pad,
                "%s " cLCY VERSION cLBL " {%s} " cLGN "(%s) " cPIN "[%s]",
+#if IGORFUZZ_FEATURE_ENABLE
+               cPIN "Mozzarbella Pizzeria - IgorFuzz",
+#else
                afl->crash_mode ? cPIN
                    "Mozzarbella Pizzeria table booking system"
                                : cYEL "Mozzarbella Pizzeria management system",
+#endif
                si, afl->use_banner, afl->power_name);
 
 #ifdef __linux__
@@ -1656,9 +1701,13 @@ void show_stats_pizza(afl_state_t *afl) {
   /* We want to warn people about not seeing new paths after a full cycle,
      except when resuming fuzzing or running in non-instrumented mode. */
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (1) {
+#else
   if (!afl->non_instrumented_mode &&
       (afl->last_find_time || afl->resuming_fuzz || afl->queue_cycle == 1 ||
        afl->in_bitmap || afl->crash_mode)) {
+#endif
 
     u_stringify_time_diff(time_tmp, cur_ms, afl->last_find_time);
     SAYF(bV bSTOP "                  last pizza baked : " cRST "%-37s ",
@@ -1785,7 +1834,11 @@ void show_stats_pizza(afl_state_t *afl) {
           u_stringify_int(IB(1), afl->saved_crashes),
           (afl->saved_crashes >= KEEP_UNIQUE_CRASH) ? "+" : "");
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (1) {
+#else
   if (afl->crash_mode) {
+#endif
 
     SAYF(bV bSTOP "                      total pizzas : " cRST
                   "%-22s                " bSTG bV              bSTOP

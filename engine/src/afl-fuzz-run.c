@@ -450,7 +450,11 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     /* afl->stop_soon is set by the handler for Ctrl+C. When it's pressed,
        we want to bail out quickly. */
 
+#if IGORFUZZ_FEATURE_ENABLE
+    if (afl->stop_soon || fault != FSRV_RUN_CRASH) { goto abort_calibration; }
+#else
     if (afl->stop_soon || fault != afl->crash_mode) { goto abort_calibration; }
+#endif
 
     if (!afl->non_instrumented_mode && !afl->stage_cur &&
         !count_bytes(afl, afl->fsrv.trace_bits)) {
@@ -493,7 +497,11 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     /* afl->stop_soon is set by the handler for Ctrl+C. When it's pressed,
        we want to bail out quickly. */
 
+#if IGORFUZZ_FEATURE_ENABLE
+    if (afl->stop_soon || fault != FSRV_RUN_CRASH) { goto abort_calibration; }
+#else
     if (afl->stop_soon || fault != afl->crash_mode) { goto abort_calibration; }
+#endif
 
     if (!afl->non_instrumented_mode && !afl->stage_cur &&
         !count_bytes(afl, afl->fsrv.trace_bits)) {

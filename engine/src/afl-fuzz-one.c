@@ -491,7 +491,11 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
     }
 
+#if IGORFUZZ_FEATURE_ENABLE
+    if (unlikely(afl->stop_soon) || res != FSRV_RUN_CRASH) {
+#else
     if (unlikely(afl->stop_soon) || res != afl->crash_mode) {
+#endif
 
       ++afl->cur_skipped_items;
       goto abandon_entry;
@@ -3214,7 +3218,11 @@ static u8 mopt_common_fuzzing(afl_state_t *afl, MOpt_globals_t MOpt_globals) {
 
     }
 
+#if IGORFUZZ_FEATURE_ENABLE
+    if (afl->stop_soon || res != FSRV_RUN_CRASH) {
+#else
     if (afl->stop_soon || res != afl->crash_mode) {
+#endif
 
       ++afl->cur_skipped_items;
       goto abandon_entry;

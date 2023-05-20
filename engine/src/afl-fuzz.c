@@ -869,9 +869,12 @@ int main(int argc, char **argv_orig, char **envp) {
         break;
 
       case 'C':                                               /* crash mode */
-
+#if IGORFUZZ_FEATURE_ENABLE
+        afl->crash_mode++;
+#else
         if (afl->crash_mode) { FATAL("Multiple -C options not supported"); }
         afl->crash_mode = FSRV_RUN_CRASH;
+#endif
         break;
 
       case 'n':                                                /* dumb mode */
@@ -1408,13 +1411,15 @@ int main(int argc, char **argv_orig, char **envp) {
   }
 
   if (afl->non_instrumented_mode) {
-
+#if IGORFUZZ_FEATURE_ENABLE
+    FATAL("IgorFuzz doesn't support -n option!");
+#else
     if (afl->crash_mode) { FATAL("-C and -n are mutually exclusive"); }
     if (afl->fsrv.frida_mode) { FATAL("-O and -n are mutually exclusive"); }
     if (afl->fsrv.qemu_mode) { FATAL("-Q and -n are mutually exclusive"); }
     if (afl->fsrv.cs_mode) { FATAL("-A and -n are mutually exclusive"); }
     if (afl->unicorn_mode) { FATAL("-U and -n are mutually exclusive"); }
-
+#endif
   }
 
   setenv("__AFL_OUT_DIR", afl->out_dir, 1);

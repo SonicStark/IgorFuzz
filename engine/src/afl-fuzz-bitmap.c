@@ -488,7 +488,11 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
   }
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (likely(fault == FSRV_RUN_CRASH)) {
+#else
   if (likely(fault == afl->crash_mode)) {
+#endif
 
     /* Keep only if there are new bits in the map, add to queue for
        future fuzzing, etc. */
@@ -507,7 +511,11 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
     if (likely(!new_bits)) {
 
+#if IGORFUZZ_FEATURE_ENABLE
+      ++afl->total_crashes;
+#else
       if (unlikely(afl->crash_mode)) { ++afl->total_crashes; }
+#endif
       return 0;
 
     }

@@ -895,7 +895,11 @@ void perform_dry_run(afl_state_t *afl) {
 
     if (afl->stop_soon) { return; }
 
+#if IGORFUZZ_FEATURE_ENABLE
+    if (res == FSRV_RUN_CRASH || res == FSRV_RUN_NOBITS) {
+#else
     if (res == afl->crash_mode || res == FSRV_RUN_NOBITS) {
+#endif
 
       SAYF(cGRA "    len = %u, map size = %u, exec speed = %llu us\n" cRST,
            q->len, q->bitmap_size, q->exec_us);
@@ -906,7 +910,11 @@ void perform_dry_run(afl_state_t *afl) {
 
       case FSRV_RUN_OK:
 
+#if IGORFUZZ_FEATURE_ENABLE
+        FATAL("Test case '%s' does *NOT* crash", fn);
+#else
         if (afl->crash_mode) { FATAL("Test case '%s' does *NOT* crash", fn); }
+#endif
 
         break;
 
@@ -952,7 +960,11 @@ void perform_dry_run(afl_state_t *afl) {
 
       case FSRV_RUN_CRASH:
 
+#if IGORFUZZ_FEATURE_ENABLE
+        break;
+#else
         if (afl->crash_mode) { break; }
+#endif
 
         if (afl->fsrv.mem_limit) {
 
