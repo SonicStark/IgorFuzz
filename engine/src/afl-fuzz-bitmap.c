@@ -610,7 +610,7 @@ write_crash_detail(afl_state_t *afl) {
   FILE *f = fopen(fn, "a");
   if (unlikely(!f)) { PFATAL("Failed to open %s", fn); }
 
-  fprintf(f, "@FILE:%s; @SIZE:%lx; @HITS:%llx; @ADDR:null;",
+  fprintf(f, "@FILE:%s; @SIZE:%lx; @HITS:%llx; @ADDR:null;\n",
     afl->queue_top->fname,
     afl->queue_top->bitmap_size,
     afl->fsrv.actual_counts
