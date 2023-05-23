@@ -636,6 +636,15 @@ typedef struct afl_state {
   u64 total_bitmap_size,                /* Total bit count for all bitmaps  */
       total_bitmap_entries;             /* Number of bitmaps counted        */
 
+#if IGORFUZZ_FEATURE_ENABLE
+  // The matrix which is the origin of coverage-decrease (I show you how deep the rabbit-hole goes.)
+  struct queue_entry *testcase_matrix;
+  // min afl_forkserver::actual_counts maintained for coverage-decrease
+  u64 min_actual_cnts;
+  // min result of count_bytes maintained for coverage-decrease
+  u32 min_bitmap_size;
+#endif
+
   s32 cpu_core_count,                   /* CPU core count                   */
       cpu_to_bind;                      /* bind to specific CPU             */
 
@@ -1120,6 +1129,16 @@ u8 *describe_op(afl_state_t *, u8, size_t);
 u8 save_if_interesting(afl_state_t *, void *, u32, u8);
 u8 has_new_bits(afl_state_t *, u8 *);
 u8 has_new_bits_unclassified(afl_state_t *, u8 *);
+#if IGORFUZZ_FEATURE_ENABLE
+u8   has_few_bits(afl_state_t *, u8 *);
+void write_crash_detail(afl_state_t *);
+# ifdef SIMPLE_FILES
+# error SIMPLE_FILES is not supported by IgorFuzz 
+# endif
+# ifdef INTROSPECTION
+# error INTROSPECTION is not supported by IgorFuzz
+# endif
+#endif
 
 /* Extras */
 

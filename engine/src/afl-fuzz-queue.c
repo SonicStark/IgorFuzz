@@ -684,6 +684,15 @@ void update_bitmap_score(afl_state_t *afl, struct queue_entry *q) {
 
   }
 
+#if IGORFUZZ_FEATURE_ENABLE
+  // Make sure the matrix has its trace_mini
+  if (unlikely(q == afl->testcase_matrix && !q->trace_mini)) {
+    u32 len = (afl->fsrv.map_size >> 3);
+    q->trace_mini = (u8 *)ck_alloc(len);
+    minimize_bits(afl, q->trace_mini, afl->fsrv.trace_bits);
+  }
+#endif
+
   /* For every byte set in afl->fsrv.trace_bits[], see if there is a previous
      winner, and how it compares to us. */
   for (i = 0; i < afl->fsrv.map_size; ++i) {
@@ -740,12 +749,22 @@ void update_bitmap_score(afl_state_t *afl, struct queue_entry *q) {
         /* Looks like we're going to win. Decrease ref count for the
            previous winner, discard its afl->fsrv.trace_bits[] if necessary. */
 
+#if IGORFUZZ_FEATURE_ENABLE
+        if (afl->top_rated[i] == afl->testcase_matrix) {
+          if (afl->testcase_matrix->tc_ref > 0) {
+              afl->testcase_matrix->tc_ref -= 1;
+          } // keep trace_mini of matrix forever
+        } else {
+#endif
         if (!--afl->top_rated[i]->tc_ref) {
 
           ck_free(afl->top_rated[i]->trace_mini);
           afl->top_rated[i]->trace_mini = 0;
 
         }
+#if IGORFUZZ_FEATURE_ENABLE
+        }
+#endif
 
       }
 
@@ -777,6 +796,11 @@ void update_bitmap_score(afl_state_t *afl, struct queue_entry *q) {
    all fuzzing steps. */
 
 void cull_queue(afl_state_t *afl) {
+
+#if IGORFUZZ_FEATURE_ENABLE
+  if (unlikely(!afl->testcase_matrix))
+    { FATAL("World will go down without a matrix!"); }
+#endif
 
   if (likely(!afl->score_changed || afl->non_instrumented_mode)) { return; }
 
@@ -810,11 +834,25 @@ void cull_queue(afl_state_t *afl) {
 
       while (j--) {
 
+#if IGORFUZZ_FEATURE_ENABLE
+        u8 *trated = afl->top_rated[i]->trace_mini;
+        u8 *matrix = afl->testcase_matrix->trace_mini;
+        //Here the removed bits are matrix has but trated doesn't have.
+        //Because any disappeared tuple in trace_bits indicates that 
+        //there is an edge which is no longer touched - we desire for
+        //coverage-decrease rather than -increase.
+        if ((trated[j] ^ matrix[j]) & matrix[j]) {
+
+          temp_v[j] &= ~((trated[j] ^ matrix[j]) & matrix[j]);
+
+        }
+#else
         if (afl->top_rated[i]->trace_mini[j]) {
 
           temp_v[j] &= ~afl->top_rated[i]->trace_mini[j];
 
         }
+#endif
 
       }
 
@@ -905,7 +943,14 @@ u32 calculate_score(afl_state_t *afl, struct queue_entry *q) {
 
   /* Adjust score based on bitmap size. The working theory is that better
      coverage translates to better targets. Multiplier from 0.25x to 3x. */
-
+#if IGORFUZZ_FEATURE_ENABLE
+  if      (q->bitmap_size * 0.3  > avg_bitmap_size) { perf_score *= 0.25; } 
+  else if (q->bitmap_size * 0.5  > avg_bitmap_size) { perf_score *= 0.5 ; } 
+  else if (q->bitmap_size * 0.75 > avg_bitmap_size) { perf_score *= 0.75; }
+  else if (q->bitmap_size * 3    < avg_bitmap_size) { perf_score *= 3   ; }
+  else if (q->bitmap_size * 2    < avg_bitmap_size) { perf_score *= 2   ; }
+  else if (q->bitmap_size * 1.5  < avg_bitmap_size) { perf_score *= 1.5 ; }
+#else
   if (q->bitmap_size * 0.3 > avg_bitmap_size) {
 
     perf_score *= 3;
@@ -931,6 +976,7 @@ u32 calculate_score(afl_state_t *afl, struct queue_entry *q) {
     perf_score *= 0.75;
 
   }
+#endif // IGORFUZZ_FEATURE_ENABLE
 
   /* Adjust score based on handicap. Handicap is proportional to how late
      in the game we learned about this path. Latecomers are allowed to run

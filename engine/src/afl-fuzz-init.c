@@ -951,6 +951,21 @@ void perform_dry_run(afl_state_t *afl) {
 
     res = calibrate_case(afl, q, use_mem, 0, 1);
 
+#if IGORFUZZ_FEATURE_ENABLE
+    if (!afl->testcase_matrix) {
+      //The most common case: 1 initial testcase to start IgorFuzz.
+      //Then it should be the matrix. If there is an in_place_resume,
+      //We just pick the first one suitable as the matrix.
+      //We choose the matrix right after the first run of calibrate_case
+      //because some bootstrap work should be done before matrix birth.
+      afl->testcase_matrix = q;
+      //Re-calibrate after bootstrap and matrix birth.
+      //This ensures the matrix has its trace_mini and 
+      //all other stuffs got ready.
+      res = calibrate_case(afl, q, use_mem, 0, 1);
+    }
+#endif
+
     if (afl->stop_soon) { return; }
 
 #if IGORFUZZ_FEATURE_ENABLE

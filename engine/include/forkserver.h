@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#include "config.h"
 #include "types.h"
 
 #ifdef __linux__
@@ -99,6 +100,10 @@ typedef struct afl_forkserver {
   /* a program that includes afl-forkserver needs to define these */
 
   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
+
+#if IGORFUZZ_FEATURE_ENABLE
+  u64 actual_counts; // Save actual counts when classify_counts kicks in
+#endif
 
   s32 fsrv_pid,                         /* PID of the fork server           */
       child_pid,                        /* PID of the fuzzed program        */

@@ -3,6 +3,9 @@
 
 u32 skim(const u32 *virgin, const u32 *current, const u32 *current_end);
 u32 classify_word(u32 word);
+#if IGORFUZZ_FEATURE_ENABLE
+u16 sum_word(u32 word);
+#endif
 
 inline u32 classify_word(u32 word) {
 
@@ -16,6 +19,14 @@ inline u32 classify_word(u32 word) {
   return word;
 
 }
+
+#if IGORFUZZ_FEATURE_ENABLE
+inline u16 sum_word(u32 word) {
+  u16 mem16[2];
+  memcpy(mem16, &word, sizeof(mem16));
+  return (u16)(mem16[0] + mem16[1]);
+}
+#endif
 
 void simplify_trace(afl_state_t *afl, u8 *bytes) {
 
@@ -50,12 +61,18 @@ inline void classify_counts(afl_forkserver_t *fsrv) {
   u32 *mem = (u32 *)fsrv->trace_bits;
   u32  i = (fsrv->map_size >> 2);
 
+#if IGORFUZZ_FEATURE_ENABLE
+  fsrv->actual_counts = 0;
+#endif
+
   while (i--) {
 
     /* Optimize for sparse bitmaps. */
-
+#if IGORFUZZ_FEATURE_ENABLE
+    if (unlikely(*mem)) { fsrv->actual_counts += sum_word(*mem); *mem = classify_word(*mem); }
+#else
     if (unlikely(*mem)) { *mem = classify_word(*mem); }
-
+#endif
     mem++;
 
   }

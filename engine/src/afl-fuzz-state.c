@@ -140,6 +140,12 @@ void afl_state_init(afl_state_t *afl, uint32_t map_size) {
   afl->fsrv.child_pid = -1;
   afl->fsrv.out_dir_fd = -1;
 
+#if IGORFUZZ_FEATURE_ENABLE
+  afl->min_actual_cnts = UINT64_MAX;
+  afl->min_bitmap_size = UINT64_MAX;
+  afl->fsrv.actual_counts = 0;
+#endif
+
   init_mopt_globals(afl);
 
   list_append(&afl_states, afl);

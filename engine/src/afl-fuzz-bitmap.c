@@ -294,12 +294,21 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
   u8 is_timeout = 0;
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (new_bits & 0x20) {
+
+    new_bits -= 0x20;
+    is_timeout = 1;
+
+  }
+#else
   if (new_bits & 0xf0) {
 
     new_bits -= 0x80;
     is_timeout = 1;
 
   }
+#endif // IGORFUZZ_FEATURE_ENABLE
 
   size_t real_max_len =
       MIN(max_description_len, sizeof(afl->describe_op_buf_256));
@@ -382,7 +391,22 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
   if (is_timeout) { strcat(ret, ",+tout"); }
 
+#if IGORFUZZ_FEATURE_ENABLE
+  switch (new_bits)
+  {
+  case 0x02:  strcat(ret, ",+cov"); break;
+  case 0x11:  strcat(ret, ",-xxh"); break;
+  case 0x12:  strcat(ret, ",-xcx"); break;
+  case 0x13:  strcat(ret, ",-xch"); break;
+  case 0x14:  strcat(ret, ",-bxx"); break;
+  case 0x15:  strcat(ret, ",-bxh"); break;
+  case 0x16:  strcat(ret, ",-bcx"); break;
+  case 0x17:  strcat(ret, ",-bch"); break;
+  default  :                        break;
+  }
+#else
   if (new_bits == 2) { strcat(ret, ",+cov"); }
+#endif // IGORFUZZ_FEATURE_ENABLE
 
   if (unlikely(strlen(ret) >= max_description_len))
     FATAL("describe string is too long");
@@ -448,6 +472,343 @@ void write_crash_readme(afl_state_t *afl) {
 
 }
 
+#if IGORFUZZ_FEATURE_ENABLE
+
+/**
+ * Check if the current execution path brings anything few to the table.
+ * It will change nothing but the virgin bits - reset a tuple to virgin
+ * state (0xff) if not touched.
+ * 
+ * @return less than 0x10 ----> return as has_new_bits. Otherwise:
+ * bms cov hcn  ---->  ret
+ * 1   1   1    ---->  0x17
+ * 1   1   0    ---->  0x16
+ * 1   0   1    ---->  0x15
+ * 1   0   0    ---->  0x14
+ * 0   1   1    ---->  0x13
+ * 0   1   0    ---->  0x12
+ * 0   0   1    ---->  0x11
+ * 0   0   0    ---->  0x10
+*/
+inline u8 has_few_bits(afl_state_t *afl, u8* virgin_map) {
+
+  // There is no matrix, which means it is in process and
+  // we should run normal has_new_bits to wait for its arrival.
+  if (unlikely(!afl->testcase_matrix)) { return has_new_bits(afl, virgin_map); }
+
+  u8 bms_decrease = 0; // whether bitmap_size gets decreased
+  u8 cov_decrease = 0; // whether at least one edge is no longer hit
+  u8 hcn_decrease = 0; // whether the total hit counts gets decreased
+  
+  u8 ret = 0x10; // ret < 0x10 means return as has_new_bits
+
+#ifdef WORD_SIZE_64
+
+  u64 *current = (u64 *)afl->fsrv.trace_bits;
+  u64 *virgin  = (u64 *)virgin_map;
+
+  u32 i = ((afl->fsrv.real_map_size + 7) >> 3);
+
+#else
+
+  u32 *current = (u32 *)afl->fsrv.trace_bits;
+  u32 *virgin  = (u32 *)virgin_map;
+
+  u32 i = ((afl->fsrv.real_map_size + 3) >> 2);
+
+#endif // WORD_SIZE_64
+
+  //====== check bitmap_size ======//
+  u32 cur_bitmap_size = count_bytes(afl, afl->fsrv.trace_bits);
+  if (cur_bitmap_size < afl->min_bitmap_size)
+    bms_decrease = 1;
+
+  //====== check whether any edge no longer hit ======//
+  while (i--) {
+    // Now we need to deal with two damn cases:
+    // 1. (*virgin + 1) == 0
+    //    The edges is not touched by testcase matrix. Since coverage-decrease 
+    //    is going on, we only care about disappearance of already touched edges. 
+    //    So ignore this case to optimize.
+    // 2. (*current & *virgin) == 0
+    //    It's just like which in discover_word - i.e., no bits in current bitmap 
+    //    that have not been already cleared from the virgin map - this will almost 
+    //    always be the case. But when an edge is not touched anymore, bit-AND also
+    //    gives 0. We don't want to lose this since it's a typical coverage-decrease.
+    //    So we sacrifice the speed optimization in exchange for hope :-(
+#ifdef WORD_SIZE_64
+    if (unlikely((u64)(*virgin + 1)))
+#else
+    if (unlikely((u32)(*virgin + 1)))
+#endif
+    {
+      //====== check total hit counts ======//
+      if (unlikely((*current & *virgin) && (afl->fsrv.actual_counts < afl->min_actual_cnts)))
+        // trace_bits has already been classfied. We check if there are some bits 
+        // that have not been already cleared from the virgin map to reduce sensitivity.
+        hcn_decrease = 1;
+
+      u8* cur = (u8*)current;
+      u8* vir = (u8*)virgin;
+
+#ifdef WORD_SIZE_64
+      if ((vir[0] != 0xff && cur[0] == 0x0) || (vir[1] != 0xff && cur[1] == 0x0) ||
+          (vir[2] != 0xff && cur[2] == 0x0) || (vir[3] != 0xff && cur[3] == 0x0) ||
+          (vir[4] != 0xff && cur[4] == 0x0) || (vir[5] != 0xff && cur[5] == 0x0) ||
+          (vir[6] != 0xff && cur[6] == 0x0) || (vir[7] != 0xff && cur[7] == 0x0))
+      // If there is a touched byte being untouched now,
+      // it will mean there is a path disappeared. Update virgin_bits here!
+      {
+        if (vir[0] != 0xff && cur[0] == 0x0) { vir[0] = 0xff; }
+        if (vir[1] != 0xff && cur[1] == 0x0) { vir[1] = 0xff; }
+        if (vir[2] != 0xff && cur[2] == 0x0) { vir[2] = 0xff; }
+        if (vir[3] != 0xff && cur[3] == 0x0) { vir[3] = 0xff; }
+        if (vir[4] != 0xff && cur[4] == 0x0) { vir[4] = 0xff; }
+        if (vir[5] != 0xff && cur[5] == 0x0) { vir[5] = 0xff; }
+        if (vir[6] != 0xff && cur[6] == 0x0) { vir[6] = 0xff; }
+        if (vir[7] != 0xff && cur[7] == 0x0) { vir[7] = 0xff; }
+
+        cov_decrease = 1;
+      }
+#else
+      if ((vir[0] != 0xff && cur[0] == 0x0) || (vir[1] != 0xff && cur[1] == 0x0) ||
+          (vir[2] != 0xff && cur[2] == 0x0) || (vir[3] != 0xff && cur[3] == 0x0))
+      // If there is a touched byte being untouched now,
+      // it will mean there is a path disappeared. Update virgin_bits here!
+      {
+        if (vir[0] != 0xff && cur[0] == 0x0) { vir[0] = 0xff; }
+        if (vir[1] != 0xff && cur[1] == 0x0) { vir[1] = 0xff; }
+        if (vir[2] != 0xff && cur[2] == 0x0) { vir[2] = 0xff; }
+        if (vir[3] != 0xff && cur[3] == 0x0) { vir[3] = 0xff; }
+
+        cov_decrease = 1;
+      }
+#endif // WORD_SIZE_64
+    }
+    current++;
+    virgin++;
+  } // while (i--)
+
+  if (cov_decrease) afl->bitmap_changed = 1;
+
+  ret += bms_decrease<<2;
+  ret += cov_decrease<<1;
+  ret += hcn_decrease;
+  return ret; // should be in [0x10 , 0x17]
+}
+
+/**
+ * Write README.txt in the crash directory
+ * for the new queued entry `afl->queue_top`
+*/
+void __attribute__((hot))
+write_crash_detail(afl_state_t *afl) {
+
+  u8 fn[PATH_MAX];
+  sprintf(fn, "%s/crashes/README.txt", afl->out_dir);
+
+  FILE *f = fopen(fn, "a");
+  if (unlikely(!f)) { PFATAL("Failed to open %s", fn); }
+
+  fprintf(f, "@FILE:%s; @SIZE:%lx; @HITS:%llx; @ADDR:null;",
+    afl->queue_top->fname,
+    afl->queue_top->bitmap_size,
+    afl->fsrv.actual_counts
+  );
+  fclose(f);
+}
+
+/**
+ * Check if the result of an execve() during routine fuzzing is interesting.
+ * Save or queue the input test case for further analysis if so.
+ * 
+ * @note afl->non_instrumented_mode should always be 0 when using IgorFuzz.
+ * 
+ * @return Returns 1 if entry is saved, 0 otherwise.
+*/
+u8 __attribute__((hot))
+save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+
+  if (unlikely(len == 0)) { return 0; }
+  if (unlikely(fault == FSRV_RUN_TMOUT && afl->afl_env.afl_ignore_timeouts)) { return 0; }
+
+  u8  fn[PATH_MAX];
+  s32 fd;
+  u8 *queue_fn = "";
+  u8  classified = 0; u64 cksum = 0; //help afl->schedule
+  u8  is_timeout = 0, few_bits = 0; //state store before function return
+  u8  res;
+
+  /* Update path frequency. */
+
+  /* Generating a hash on every input is super expensive. Bad idea and should
+     only be used for special schedules */
+  if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE)) {
+
+    classify_counts(&afl->fsrv);
+    classified = 1;
+
+    cksum = hash64(afl->fsrv.trace_bits, afl->fsrv.map_size, HASH_CONST);
+
+    /* Saturated increment */
+    if (likely(afl->n_fuzz[cksum % N_FUZZ_SIZE] < 0xFFFFFFFF))
+      afl->n_fuzz[cksum % N_FUZZ_SIZE]++;
+
+  }
+
+  while (1) { switch (fault) {
+    case FSRV_RUN_TMOUT:
+    ////////////////////
+      //Timeouts are not very interesting, but we're still obliged to keep
+      //a handful of samples. We use the presence of new bits in the
+      //hang-specific bitmap as a signal of uniqueness.
+      ++afl->total_tmouts;
+
+      if (afl->saved_hangs >= KEEP_UNIQUE_HANG) { return 0; }
+
+      if (unlikely(!classified)) { classify_counts(&afl->fsrv); classified = 1; }
+      simplify_trace(afl, afl->fsrv.trace_bits);
+
+      few_bits = has_few_bits(afl, afl->virgin_tmout);
+      if (few_bits == 0x10 || few_bits == 0x00) { return 0; }
+
+      //It's an interesting timeout. Go to save it.
+      is_timeout = 0x20;
+      //Before saving, we make sure that it's a genuine hang by re-running
+      //the target with a more generous timeout (unless the default timeout is already generous).
+      if (afl->fsrv.exec_tmout < afl->hang_tmout) {
+
+        u32 tmp_len = write_to_testcase(afl, &mem, len, 0);
+        if (likely(tmp_len)) { len = tmp_len;                              } 
+        else                 { len = write_to_testcase(afl, &mem, len, 1); }
+
+        fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        classify_counts(&afl->fsrv);
+
+        //A corner case that one user reported bumping into:
+        //  increasing the timeout actually uncovers a crash. 
+        //We restart the switch in while loop to make sure 
+        //we don't discard it if so.
+        if (fault == FSRV_RUN_CRASH) { continue; }
+        //If not a timeout, also restart.
+        if (fault != FSRV_RUN_TMOUT) { continue; }
+      }
+
+      snprintf(fn, PATH_MAX, "%s/hangs/id:%06llu,%s", afl->out_dir, afl->saved_hangs,
+                describe_op(afl, 0, NAME_MAX - strlen("id:000000,")));
+
+      fd = open(fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
+      if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", fn); }
+      ck_write(fd, mem, len, fn);
+      close(fd);
+
+      ++afl->saved_hangs;
+      afl->last_hang_time = get_cur_time();
+
+      break;
+
+    case FSRV_RUN_CRASH:
+    ////////////////////
+      //Since IgorFuzz is based on Crash Exploration Mode,
+      //each queue entry should also be a crash.
+      //Crashes which lead to coverage-decrease is what IgorFuzz needs.
+      //Keep them and add them to queue. Now dir "crashes" is used for
+      //holding "README.TXT" only, which saves more details for each queue entry.
+      ++afl->total_crashes;
+
+      if (likely(classified)) {
+
+        few_bits = has_few_bits(afl, afl->virgin_bits); 
+
+      } else {
+
+        classify_counts(&afl->fsrv);    classified = 1;
+        few_bits = has_few_bits(afl, afl->virgin_bits);
+
+      }
+
+      if (likely(few_bits == 0x10 || few_bits == 0x00)) { return 0; }
+
+      queue_fn = alloc_printf("%s/queue/id:%06u,%s", afl->out_dir, afl->queued_items,
+          describe_op(afl, few_bits + is_timeout, NAME_MAX - strlen("id:000000,")));
+
+      fd = open(queue_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
+      if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
+      ck_write(fd, mem, len, queue_fn);
+      close(fd);
+      //After this afl->queue_top will points to the entry just added
+      add_to_queue(afl, queue_fn, len, 0);
+
+      if (few_bits & 0x02) {
+        // this means +cov or -cov
+        afl->queue_top->has_new_cov = 1;
+        ++afl->queued_with_cov;
+      }
+
+      // due to classify counts we have to recalculate the checksum
+      afl->queue_top->exec_cksum =
+          hash64(afl->fsrv.trace_bits, afl->fsrv.map_size, HASH_CONST);
+
+      // For AFLFast schedules we update the new queue entry
+      if (likely(cksum)) {
+        afl->queue_top->n_fuzz_entry = cksum % N_FUZZ_SIZE;
+        afl->n_fuzz[afl->queue_top->n_fuzz_entry] = 1;
+      }
+
+      // Try to calibrate inline; this also calls update_bitmap_score() when successful
+      res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
+
+      if (unlikely(res == FSRV_RUN_ERROR))
+        { FATAL("Unable to execute target application"); }
+
+      if (likely(afl->q_testcase_max_cache_size)) 
+        { queue_testcase_store_mem(afl, afl->queue_top, mem); }
+
+      // We arrive here because has_few_bits indicates that queue entry
+      // `afl->queue_top` is interesting. With calibrate_case run before
+      // we have acquired better info and updated those global minimums. 
+      // Now it's time to save the detail of current entry.
+      write_crash_detail(afl);
+
+      ++afl->saved_crashes;
+
+      afl->last_crash_time = get_cur_time();
+      afl->last_crash_execs = afl->fsrv.total_execs;
+
+#ifdef __linux__
+      if (afl->fsrv.nyx_mode) {
+
+        u8 fn_log[PATH_MAX];
+
+        (void)(snprintf(fn_log, PATH_MAX, "%s.log", fn) + 1);
+        fd = open(fn_log, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
+        if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", fn_log); }
+
+        u32 nyx_aux_string_len = afl->fsrv.nyx_handlers->nyx_get_aux_string(
+            afl->fsrv.nyx_runner, afl->fsrv.nyx_aux_string, 0x1000);
+
+        ck_write(fd, afl->fsrv.nyx_aux_string, nyx_aux_string_len, fn_log);
+        close(fd);
+
+      }
+#endif
+
+      return 1;
+
+    case FSRV_RUN_ERROR:
+    ////////////////////
+      FATAL("Unable to execute target application"); // exit() will be called
+    default:
+    ////////
+      break;
+  } /* switch (fault) END */ break; } /* while (1) END */
+  return 0;
+}
+
+
+#else // IGORFUZZ_FEATURE_ENABLE
+
+
 /* Check if the result of an execve() during routine fuzzing is interesting,
    save or queue the input test case for further analysis if so. Returns 1 if
    entry is saved, 0 otherwise. */
@@ -488,11 +849,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
   }
 
-#if IGORFUZZ_FEATURE_ENABLE
-  if (likely(fault == FSRV_RUN_CRASH)) {
-#else
   if (likely(fault == afl->crash_mode)) {
-#endif
 
     /* Keep only if there are new bits in the map, add to queue for
        future fuzzing, etc. */
@@ -511,11 +868,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
     if (likely(!new_bits)) {
 
-#if IGORFUZZ_FEATURE_ENABLE
-      ++afl->total_crashes;
-#else
       if (unlikely(afl->crash_mode)) { ++afl->total_crashes; }
-#endif
       return 0;
 
     }
@@ -874,3 +1227,5 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
 }
 
+
+#endif // IGORFUZZ_FEATURE_ENABLE

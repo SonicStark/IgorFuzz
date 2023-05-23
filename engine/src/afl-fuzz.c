@@ -2187,6 +2187,10 @@ int main(int argc, char **argv_orig, char **envp) {
   memset(afl->virgin_tmout, 255, map_size);
   memset(afl->virgin_crash, 255, map_size);
 
+#if IGORFUZZ_FEATURE_ENABLE
+  // We must do this to determine testcase matrix
+  perform_dry_run(afl);
+#else
   if (likely(!afl->afl_env.afl_no_startup_calibration)) {
 
     perform_dry_run(afl);
@@ -2197,6 +2201,7 @@ int main(int argc, char **argv_orig, char **envp) {
     usleep(1000);
 
   }
+#endif
 
   if (afl->q_testcase_max_cache_entries) {
 

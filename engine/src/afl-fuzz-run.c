@@ -473,9 +473,17 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   if (q->exec_cksum) {
 
     memcpy(afl->first_trace, afl->fsrv.trace_bits, afl->fsrv.map_size);
+#if IGORFUZZ_FEATURE_ENABLE
+    hnb = has_few_bits(afl, afl->virgin_bits);
+    if (hnb > 0x10) { 
+      new_bits = hnb;
+    } else {
+      if (hnb > new_bits) new_bits = hnb;
+    }
+#else
     hnb = has_new_bits(afl, afl->virgin_bits);
     if (hnb > new_bits) { new_bits = hnb; }
-
+#endif
   }
 
   start_us = get_cur_time_us();
@@ -519,8 +527,17 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     cksum = hash64(afl->fsrv.trace_bits, afl->fsrv.map_size, HASH_CONST);
     if (q->exec_cksum != cksum) {
 
+#if IGORFUZZ_FEATURE_ENABLE
+      hnb = has_few_bits(afl, afl->virgin_bits);
+      if (hnb > 0x10) { 
+        new_bits = hnb;
+      } else {
+        if (hnb > new_bits) new_bits = hnb;
+      }
+#else
       hnb = has_new_bits(afl, afl->virgin_bits);
       if (hnb > new_bits) { new_bits = hnb; }
+#endif
 
       if (q->exec_cksum) {
 
@@ -602,13 +619,26 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   afl->total_bitmap_size += q->bitmap_size;
   ++afl->total_bitmap_entries;
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (new_bits > 0x10) {
+    if (afl->min_bitmap_size > q->bitmap_size)
+        afl->min_bitmap_size = q->bitmap_size;
+    if (afl->min_actual_cnts > afl->fsrv.actual_counts)
+        afl->min_actual_cnts = afl->fsrv.actual_counts;
+  }
+#endif
+
   update_bitmap_score(afl, q);
 
   /* If this case didn't result in new output from the instrumentation, tell
      parent. This is a non-critical problem, but something to warn the user
      about. */
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if (!afl->non_instrumented_mode && first_run && !fault && (new_bits==0x10 || new_bits==0x00)) {
+#else
   if (!afl->non_instrumented_mode && first_run && !fault && !new_bits) {
+#endif
 
     fault = FSRV_RUN_NOBITS;
 
@@ -616,7 +646,11 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
 abort_calibration:
 
+#if IGORFUZZ_FEATURE_ENABLE
+  if ((new_bits & 0x02) && !q->has_new_cov) {
+#else
   if (new_bits == 2 && !q->has_new_cov) {
+#endif
 
     q->has_new_cov = 1;
     ++afl->queued_with_cov;
