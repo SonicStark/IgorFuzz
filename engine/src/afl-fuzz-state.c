@@ -142,7 +142,7 @@ void afl_state_init(afl_state_t *afl, uint32_t map_size) {
 
 #if IGORFUZZ_FEATURE_ENABLE
   afl->min_actual_cnts = UINT64_MAX;
-  afl->min_bitmap_size = UINT64_MAX;
+  afl->min_bitmap_size = UINT32_MAX;
   afl->fsrv.actual_counts = 0;
 #endif
 
