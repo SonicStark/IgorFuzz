@@ -2633,8 +2633,8 @@ void check_asan_opts(afl_state_t *afl) {
     if (afl->crash_mode) {
       if (strstr(x, "log_")) 
         WARNF("Your sanitizer logging setting won't work");
-      if (!strstr(x,                          "stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT))
-        FATAL("Custom ASAN_OPTIONS set without stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT);
+      if (!strstr(x,                          "stack_trace_format="   IGORFUZZ_CALLSTACK_FORMAT))
+        FATAL("Custom ASAN_OPTIONS set without stack_trace_format=%s",IGORFUZZ_CALLSTACK_FORMAT);
     }
 #endif
 
@@ -2658,8 +2658,8 @@ void check_asan_opts(afl_state_t *afl) {
     }
 
 #if IGORFUZZ_FEATURE_ENABLE
-    if (afl->crash_mode && !strstr(x,       "stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT))
-      FATAL("Custom MSAN_OPTIONS set without stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT);
+    if (afl->crash_mode && !strstr(x,       "stack_trace_format="   IGORFUZZ_CALLSTACK_FORMAT))
+      FATAL("Custom MSAN_OPTIONS set without stack_trace_format=%s",IGORFUZZ_CALLSTACK_FORMAT);
 #endif
 
   }
@@ -2675,8 +2675,8 @@ void check_asan_opts(afl_state_t *afl) {
     }
 
 #if IGORFUZZ_FEATURE_ENABLE
-    if (afl->crash_mode && !strstr(x,       "stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT))
-      FATAL("Custom LSAN_OPTIONS set without stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT);
+    if (afl->crash_mode && !strstr(x,       "stack_trace_format="   IGORFUZZ_CALLSTACK_FORMAT))
+      FATAL("Custom LSAN_OPTIONS set without stack_trace_format=%s",IGORFUZZ_CALLSTACK_FORMAT);
 #endif
 
   }
@@ -2684,8 +2684,8 @@ void check_asan_opts(afl_state_t *afl) {
 #if IGORFUZZ_FEATURE_ENABLE
   x = get_afl_env("UBSAN_OPTIONS");
 
-  if (x && afl->crash_mode && !strstr(x,   "stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT))
-    FATAL("Custom UBSAN_OPTIONS set without stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT);
+  if (x && afl->crash_mode && !strstr(x,   "stack_trace_format="   IGORFUZZ_CALLSTACK_FORMAT))
+    FATAL("Custom UBSAN_OPTIONS set without stack_trace_format=%s",IGORFUZZ_CALLSTACK_FORMAT);
 #endif
 
 }
