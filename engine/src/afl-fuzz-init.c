@@ -1205,7 +1205,15 @@ void perform_dry_run(afl_state_t *afl) {
 
         break;
 
-    }
+    } // switch (res) END
+
+#if IGORFUZZ_FEATURE_ENABLE
+    //Write the details for each init seed.
+    //We should call it after the big switch
+    //since "crashes/README.txt" may be unwanted
+    //if any fatal error happened before.
+    write_crash_detail(afl, q);
+#endif
 
     if (unlikely(q->var_behavior && !afl->afl_env.afl_no_warn_instability)) {
 
@@ -1213,7 +1221,7 @@ void perform_dry_run(afl_state_t *afl) {
 
     }
 
-  }
+  } // for (idx = 0; idx < afl->queued_items; idx++) END
 
   if (cal_failures) {
 

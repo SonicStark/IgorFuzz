@@ -598,11 +598,10 @@ inline u8 has_few_bits(afl_state_t *afl, u8* virgin_map) {
 }
 
 /**
- * Write README.txt in the crash directory
- * for the new queued entry `afl->queue_top`
+ * Write README.txt in the crash directory for queued entry `q`
 */
 void __attribute__((hot))
-write_crash_detail(afl_state_t *afl) {
+write_crash_detail(afl_state_t *afl, struct queue_entry *q) {
 
   u8 fn[PATH_MAX];
   sprintf(fn, "%s/crashes/README.txt", afl->out_dir);
@@ -611,8 +610,8 @@ write_crash_detail(afl_state_t *afl) {
   if (unlikely(!f)) { PFATAL("Failed to open %s", fn); }
 
   fprintf(f, "@FILE:%s; @SIZE:%x; @HITS:%llx; @ADDR:null;\n",
-    afl->queue_top->fname,
-    afl->queue_top->bitmap_size,
+    q->fname,
+    q->bitmap_size,
     afl->fsrv.actual_counts
   );
   fclose(f);
@@ -768,7 +767,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
       // `afl->queue_top` is interesting. With calibrate_case run before
       // we have acquired better info and updated those global minimums. 
       // Now it's time to save the detail of current entry.
-      write_crash_detail(afl);
+      write_crash_detail(afl, afl->queue_top);
 
       ++afl->saved_crashes;
 
