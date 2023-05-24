@@ -597,6 +597,29 @@ inline u8 has_few_bits(afl_state_t *afl, u8* virgin_map) {
   return ret; // should be in [0x10 , 0x17]
 }
 
+#include "sym-blacklist.h"
+/**
+ * Read call stack file (if exists) generated
+ * within __asan_on_error in the target, read
+ * and check it to figure out the crash site.
+ * This can help to check if interesting.
+ * 
+ * @attention The crash site should locate at
+ * "module+offset". However (*module) can be 0,
+ * which means it failed to find the crash site
+ * and offset was also set to 0.
+ * 
+ * @warning (*module) will be allocated by ck_strdup.
+ * Outside user should be responsible for calling ck_free.
+ * 
+ * @param afl Need it to access call stack file
+ * @param module Receive base name of path to the module.
+ * @param offset Receive offset in the module.
+*/
+inline void find_crash_site(afl_state_t *afl, u8 **module, u32 *offset) {
+  
+}
+
 /**
  * Write README.txt in the crash directory for queued entry `q`
 */

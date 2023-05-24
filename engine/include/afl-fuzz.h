@@ -1140,6 +1140,7 @@ u8 has_new_bits(afl_state_t *, u8 *);
 u8 has_new_bits_unclassified(afl_state_t *, u8 *);
 #if IGORFUZZ_FEATURE_ENABLE
 u8   has_few_bits(afl_state_t *, u8 *);
+void find_crash_site(afl_state_t *, u8 **, u32 *);
 void write_crash_detail(afl_state_t *, struct queue_entry *);
 # ifdef SIMPLE_FILES
 # error SIMPLE_FILES is not supported by IgorFuzz 
