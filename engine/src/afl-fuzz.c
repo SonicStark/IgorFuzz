@@ -476,6 +476,18 @@ int main(int argc, char **argv_orig, char **envp) {
   afl_fsrv_init(&afl->fsrv);
   if (debug) { afl->fsrv.debug = true; }
   read_afl_environment(afl, envp);
+#if IGORFUZZ_FEATURE_ENABLE
+  //what a damn ugly hack!
+  afl->afl_env.igorfuzz_nocalstk = 
+    get_afl_env(IGORFUZZ_CALLSTACK_ENV_SHUTDOWN) ? 1 : 0;
+  afl->afl_env.igorfuzz_toolpath = 
+    (u8 *)get_afl_env(IGORFUZZ_CALLSTACK_ENV_TOOLPATH);
+  //be user-friendly :)
+  if (afl->afl_env.igorfuzz_nocalstk)
+    WARNF("User requests EMERGENCY STOP of callstack-check feature");
+  if (get_afl_env(IGORFUZZ_CALLSTACK_ENV_FILEPATH))
+    FATAL("Env " IGORFUZZ_CALLSTACK_ENV_FILEPATH " is for internal use only");
+#endif
   if (afl->shm.map_size) { afl->fsrv.map_size = afl->shm.map_size; }
   exit_1 = !!afl->afl_env.afl_bench_just_one;
 
@@ -878,7 +890,8 @@ int main(int argc, char **argv_orig, char **envp) {
 
       case 'C':                                               /* crash mode */
 #if IGORFUZZ_FEATURE_ENABLE
-        afl->crash_mode++;
+        if (afl->afl_env.igorfuzz_nocalstk) afl->crash_mode = 0; //EMERGENCY STOP
+        else                                afl->crash_mode++;
 #else
         if (afl->crash_mode) { FATAL("Multiple -C options not supported"); }
         afl->crash_mode = FSRV_RUN_CRASH;
@@ -1342,6 +1355,20 @@ int main(int argc, char **argv_orig, char **envp) {
 
   setup_signal_handlers();
   check_asan_opts(afl);
+
+#if IGORFUZZ_FEATURE_ENABLE
+  if (afl->crash_mode) {
+    int ssti;
+    if (afl->afl_env.igorfuzz_toolpath) {
+      ssti = SanSymTool_init((char *)afl->afl_env.igorfuzz_toolpath);
+    } else {
+      ssti = SanSymTool_init(IGORFUZZ_CALLSTACK_DEFAULT_TOOL);
+      WARNF("Use default symbolizer " IGORFUZZ_CALLSTACK_DEFAULT_TOOL);
+    }
+    if (ssti != 0) FATAL("SanSymTool init failed (RetCode=%d)", ssti);
+    else             OKF("SanSymTool init done");
+  }
+#endif
 
   afl->power_name = power_names[afl->schedule];
 
@@ -1935,6 +1962,23 @@ int main(int argc, char **argv_orig, char **envp) {
   }
 
   if (!afl->fsrv.out_file) { setup_stdio_file(afl); }
+
+#if IGORFUZZ_FEATURE_ENABLE
+  if (afl->crash_mode) {
+    u8 cwd[PATH_MAX];
+    if (getcwd(cwd, (size_t)sizeof(cwd)) == NULL) { PFATAL("getcwd() failed"); }
+
+    if (afl->tmp_dir[0] == '/') //use path-detect behavior of .cur_input in detect_file_args
+      { afl->fsrv.call_stack_file = alloc_printf("%s/.call_stack_file"   ,      afl->tmp_dir); }
+    else
+      { afl->fsrv.call_stack_file = alloc_printf("%s/%s/.call_stack_file", cwd, afl->tmp_dir); }
+
+    if (unlink(afl->fsrv.call_stack_file) && errno != ENOENT) //make sure we start from scratch
+      { PFATAL("Your %s is bad", afl->fsrv.call_stack_file); }
+
+    setenv(IGORFUZZ_CALLSTACK_ENV_FILEPATH, afl->fsrv.call_stack_file, 1);
+  }
+#endif
 
   if (afl->cmplog_binary) {
 
@@ -2738,6 +2782,13 @@ stop_fuzzing:
   }
 
   afl_fsrv_deinit(&afl->fsrv);
+
+#if IGORFUZZ_FEATURE_ENABLE
+  if (afl->crash_mode) {
+    ck_free(afl->fsrv.call_stack_file);
+    SanSymTool_fini(); //Ignore errors
+  }
+#endif
 
   /* remove tmpfile */
   if (afl->tmp_dir != NULL && !afl->in_place_resume && afl->fsrv.out_file) {

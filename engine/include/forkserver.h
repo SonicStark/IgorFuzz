@@ -102,6 +102,7 @@ typedef struct afl_forkserver {
   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
 
 #if IGORFUZZ_FEATURE_ENABLE
+  u8 *call_stack_file; // Path to the callstack file generated in __asan_on_error
   u64 actual_counts; // Save actual counts when classify_counts kicks in
 #endif
 

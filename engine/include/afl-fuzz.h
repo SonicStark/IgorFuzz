@@ -135,6 +135,10 @@
   #define AFL_RAND_RETURN u32
 #endif
 
+#if IGORFUZZ_FEATURE_ENABLE
+  #include "sanitizer_symbolizer_tool.h"
+#endif
+
 extern s8  interesting_8[INTERESTING_8_LEN];
 extern s16 interesting_16[INTERESTING_8_LEN + INTERESTING_16_LEN];
 extern s32
@@ -407,6 +411,11 @@ typedef struct afl_env_vars {
       *afl_crash_exitcode, *afl_statsd_tags_flavor, *afl_testcache_size,
       *afl_testcache_entries, *afl_child_kill_signal, *afl_fsrv_kill_signal,
       *afl_target_env, *afl_persistent_record, *afl_exit_on_time;
+
+#if IGORFUZZ_FEATURE_ENABLE
+  u8  igorfuzz_nocalstk; //EMERGENCY STOP
+  u8 *igorfuzz_toolpath; //Path to symbolizer
+#endif
 
   s32 afl_pizza_mode;
 

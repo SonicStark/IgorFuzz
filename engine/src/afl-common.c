@@ -86,9 +86,15 @@ void set_sanitizer_defaults() {
   u8 *have_lsan_options = getenv("LSAN_OPTIONS");
   u8  have_san_options = 0;
   u8  default_options[1024] =
+#if IGORFUZZ_FEATURE_ENABLE
+      "detect_odr_violation=0:abort_on_error=1:"
+      "symbolize=0:stack_trace_format=" IGORFUZZ_CALLSTACK_FORMAT ":"
+      "allocator_may_return_null=1:handle_abort=0:";
+#else
       "detect_odr_violation=0:abort_on_error=1:symbolize=0:allocator_may_"
       "return_null=1:handle_segv=0:handle_sigbus=0:handle_abort=0:handle_"
       "sigfpe=0:handle_sigill=0:";
+#endif
 
   if (have_asan_options || have_ubsan_options || have_msan_options ||
       have_lsan_options) {

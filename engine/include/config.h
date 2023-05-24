@@ -33,6 +33,10 @@
 #define IGORFUZZ_CALLSTACK_DEFAULT_TOOL "/usr/bin/addr2line"
 #define IGORFUZZ_CALLSTACK_DEFAULT_MODE 0666
 
+#define IGORFUZZ_CALLSTACK_FORMAT_PATH "@PATH"
+#define IGORFUZZ_CALLSTACK_FORMAT_ADDR "@ADDR"
+#define IGORFUZZ_CALLSTACK_FORMAT      "@PATH%m@ADDR%o"
+
 //==============================================================//
 
 /* Version string: */
