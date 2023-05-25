@@ -963,6 +963,18 @@ void perform_dry_run(afl_state_t *afl) {
       //This ensures the matrix has its trace_mini and 
       //all other stuffs got ready.
       res = calibrate_case(afl, q, use_mem, 0, 1);
+      //Keep crash info of matrix forever in LV3
+      if (afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3) {
+        //When in LV3, this should be the first call of
+        //find_crash_site. So don't need to call ck_free.
+        find_crash_site(afl, 0, //Don't flush. Need it later.
+          &(afl->fsrv.crash_symbol),
+          &(afl->fsrv.crash_module),
+          &(afl->fsrv.crash_offset));
+        if (afl->queued_items > 1)
+          WARNF("More than 1 initial seed. ONLY SAVE NEW SEED with "
+                "SAME crash site as \"%s\".", q->fname);
+      }
     }
 #endif
 
@@ -1209,10 +1221,44 @@ void perform_dry_run(afl_state_t *afl) {
 
 #if IGORFUZZ_FEATURE_ENABLE
     //Write the details for each init seed.
-    //We should call it after the big switch
+    //We should do this after the big switch
     //since "crashes/README.txt" may be unwanted
     //if any fatal error happened before.
-    write_crash_detail(afl, q);
+    if (afl->crash_mode &&
+        afl->crash_mode < IGORFUZZ_NEW_CRASH_MODE_LV3)
+    {
+      ck_free(afl->fsrv.crash_symbol);
+      ck_free(afl->fsrv.crash_module);
+
+      find_crash_site(afl, 1, 
+        &(afl->fsrv.crash_symbol),
+        &(afl->fsrv.crash_module),
+        &(afl->fsrv.crash_offset));
+
+      write_crash_detail(afl, q);
+    }
+    else if (afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3)
+    {
+      u8 *tmp_sym = afl->fsrv.crash_symbol;
+      u8 *tmp_mod = afl->fsrv.crash_module;
+      u32 tmp_ofs = afl->fsrv.crash_offset;
+      find_crash_site(afl, 1, 
+        &(afl->fsrv.crash_symbol),
+        &(afl->fsrv.crash_module),
+        &(afl->fsrv.crash_offset));
+
+      write_crash_detail(afl, q);
+
+      ck_free(afl->fsrv.crash_symbol);
+      afl->fsrv.crash_symbol = tmp_sym;
+      ck_free(afl->fsrv.crash_module);
+      afl->fsrv.crash_module = tmp_mod;
+      afl->fsrv.crash_offset = tmp_ofs;
+    }
+    else
+    {
+      write_crash_detail(afl, q);
+    }
 #endif
 
     if (unlikely(q->var_behavior && !afl->afl_env.afl_no_warn_instability)) {

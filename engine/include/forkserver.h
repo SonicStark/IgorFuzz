@@ -102,7 +102,14 @@ typedef struct afl_forkserver {
   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
 
 #if IGORFUZZ_FEATURE_ENABLE
+/* These stuffs aren't involved in afl_fsrv_init, afl_fsrv_init_dup
+  or afl_fsrv_deinit currently. WTF!
+  Be careful if they are used outside afl-fuzz itself!!! */
+
   u8 *call_stack_file; // Path to the callstack file generated in __asan_on_error
+  u8 *crash_symbol; // Code symbol of crash site (May be null. Need ck_free.)
+  u8 *crash_module; // Module path of crash site (May be null. Need ck_free.)
+  u32 crash_offset; // Offset in virtual mem of the module where crash site locates.
   u64 actual_counts; // Save actual counts when classify_counts kicks in
 #endif
 

@@ -2784,8 +2784,10 @@ stop_fuzzing:
   afl_fsrv_deinit(&afl->fsrv);
 
 #if IGORFUZZ_FEATURE_ENABLE
-  if (afl->crash_mode) {
+  if (afl->crash_mode) { //ck_free allows null input
     ck_free(afl->fsrv.call_stack_file);
+    ck_free(afl->fsrv.crash_symbol);
+    ck_free(afl->fsrv.crash_module);
     SanSymTool_fini(); //Ignore errors
   }
 #endif

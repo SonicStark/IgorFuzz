@@ -605,19 +605,130 @@ inline u8 has_few_bits(afl_state_t *afl, u8* virgin_map) {
  * This can help to check if interesting.
  * 
  * @attention The crash site should locate at
- * "module+offset". However (*module) can be 0,
- * which means it failed to find the crash site
- * and offset was also set to 0.
+ * address (*offset) in virtual memory 
+ * (before relocating if built as PIE, of course)
+ * of the executable file located at path (*module),
+ * However any of the three values could be 0,
+ * due to those damn accidents behind.
+ * So carefully check them before using!
  * 
- * @warning (*module) will be allocated by ck_strdup.
- * Outside user should be responsible for calling ck_free.
+ * @warning (*module) and (*symbol) will be
+ * allocated by ck_strdup. Outside user 
+ * should be responsible for calling ck_free
+ * on them. WTF :-(
  * 
- * @param afl Need it to access call stack file
- * @param module Receive base name of path to the module.
+ * @param afl Need it to access call stack file.
+ * @param flush If not 0, flush call stack file
+ * with an empty line after everything done
+ * (regardless of successful or failed parsing).
+ * @param symbol Receive the symbol. Will be the
+ * innermost one if inlined functions exist.
+ * @param module Receive path to the module.
  * @param offset Receive offset in the module.
 */
-inline void find_crash_site(afl_state_t *afl, u8 **module, u32 *offset) {
-  
+void __attribute__((hot))
+find_crash_site(afl_state_t *afl, u8 flush,
+  u8 **symbol, u8 **module, u32 *offset) {
+      *symbol = 0; *module = 0; *offset = 0; //safe init
+
+  if (unlikely(!afl->fsrv.call_stack_file)) { return; }
+
+  FILE *fp = fopen(afl->fsrv.call_stack_file, "r+");
+  if (unlikely(!fp)) { return; }
+
+  //no need to be all zero.
+  char *line_buf = ck_alloc_nozero(IGORFUZZ_CALLSTACK_MAX_LINELEN);
+  if (unlikely(!line_buf)) { return; }
+
+  while (fgets(line_buf, IGORFUZZ_CALLSTACK_MAX_LINELEN, fp))
+  {
+    size_t len_ = strlen(line_buf);
+    //Remove the newline character from a normal line or jump over.
+    if (likely(len_ > IGORFUZZ_CALLSTACK_MIN_LINELEN && 
+      line_buf[len_ - 1] == '\n')) {
+      line_buf[len_ - 1]  = '\0';
+      --len_;
+    } else { continue; }
+
+    char *path_ = strstr(line_buf, IGORFUZZ_CALLSTACK_FORMAT_PATH);
+    if (unlikely(!path_)) continue; //field missing
+    path_ += strlen(IGORFUZZ_CALLSTACK_FORMAT_PATH);
+
+    char *addr_str = strstr(line_buf, IGORFUZZ_CALLSTACK_FORMAT_ADDR);
+    if (unlikely(!addr_str || path_ >= addr_str)) continue; //field missing or corrupted
+
+    *addr_str = '\0'; //all before belong to path
+    addr_str += strlen(IGORFUZZ_CALLSTACK_FORMAT_ADDR);
+
+    //check if it is a blocked module
+    u8  module_blocked = 0;
+    u8 *module_name = strrchr(path_, '/');
+    if (!module_name) module_name = path_;
+    for (int i=0; sym_blacklist_module[i] != NULL; ++i) {
+      if (strstr(module_name, sym_blacklist_module[i]))
+        //stack frame on a blocked module and the frames
+        //on the top of it all shouldn't be crash site.
+        module_blocked = 1; break;
+    }
+    if (module_blocked) {
+      //drop anything found previously
+      ck_free(*symbol); *symbol = 0; //ck_free allows NULL input
+      ck_free(*module); *module = 0; *offset = 0; 
+      continue; //go for next stack frame
+    }
+    //module isn't a blocked one, so we check symbol next
+    u32 addr_val = (u32)strtoul(addr_str, NULL, 16);
+
+    unsigned long n_sym = 0, li_, co_;
+    u8 *func = 0, *f_;  //so many damn stuffs!
+    //Symbolize it anyway. We'll check later.
+    SanSymTool_addr_send(path_, addr_val, &n_sym);
+    SanSymTool_addr_read(0, &f_, &func, &li_, &co_);
+
+    if (n_sym) {
+      //If n_sym is non-zero, the module should be likely 
+      //an analyzable stuff where crash site may locate.
+      //So we set the crash site if not found previously.
+      //If the symbol is proved to be blocked later, 
+      //we'll remove it.
+      if (func) {
+        //If func isn't null, the symbolizer seems 
+        //worked and had told sth valid about the symbol.
+        //Next we are going to check the symbol.
+        u8 func_blocked = 0;
+        for (int i=0; sym_blacklist_function[i] != NULL; ++i) {
+          if (strstr(func, sym_blacklist_function[i]))
+            //stack frames on and on the top of a blocked
+            //function all shouldn't be crash site.
+            func_blocked = 1; break;
+        }
+        if (func_blocked) {
+          //drop anything found previously
+          ck_free(*symbol); *symbol = 0;
+          ck_free(*module); *module = 0; *offset = 0;
+        } else {
+          //set all three fields
+          if (!(*module)) {
+            *symbol = ck_strdup(func);
+            *module = ck_strdup(path_); *offset = addr_val;
+          }
+        }
+      } else {
+        //If func is null, we still firmly believe that this is 
+        //very likely the crash site, but it just can't be symbolized.
+        //So we only set module and offset.
+        if (!(*module)) {
+          *symbol = 0;
+          *module = ck_strdup(path_); *offset = addr_val;
+        }
+      }
+    } // if (n_sym) END
+    SanSymTool_addr_free();
+  } // while (fgets(...)) END
+
+  ck_free(line_buf);
+  if (flush) { rewind(fp); fprintf(fp, "\n"); }
+  fclose(fp);
 }
 
 /**
@@ -632,11 +743,28 @@ write_crash_detail(afl_state_t *afl, struct queue_entry *q) {
   FILE *f = fopen(fn, "a");
   if (unlikely(!f)) { PFATAL("Failed to open %s", fn); }
 
-  fprintf(f, "@FILE:%s; @SIZE:%x; @HITS:%llx; @ADDR:null;\n",
+  fprintf(f, "@FILE:%s; @SIZE:%x; @HITS:%llx; ",
     q->fname,
     q->bitmap_size,
     afl->fsrv.actual_counts
   );
+
+  if (afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV1) {
+    if (afl->fsrv.crash_module) {
+      fprintf(f, "@ADDR:%s+0x%x; ", afl->fsrv.crash_module, afl->fsrv.crash_offset);
+    } else {
+      fprintf(f, "@ADDR:%s; ", IGORFUZZ_CALLSTACK_NUL_TEXT);
+    }
+  }
+  if (afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV2) {
+    if (afl->fsrv.crash_symbol) {
+      fprintf(f, "@FUNC:%s; ", afl->fsrv.crash_symbol);
+    } else {
+      fprintf(f, "@FUNC:%s; ", IGORFUZZ_CALLSTACK_NUL_TEXT);
+    }
+  }
+
+  fprintf(f, "\n");
   fclose(f);
 }
 
@@ -660,6 +788,8 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
   u8  classified = 0; u64 cksum = 0; //help afl->schedule
   u8  is_timeout = 0, few_bits = 0; //state store before function return
   u8  res;
+
+  u8 *tmp_sym, *tmp_mod; u32 tmp_ofs; //for new crash mode
 
   /* Update path frequency. */
 
@@ -738,6 +868,33 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
       //holding "README.TXT" only, which saves more details for each queue entry.
       ++afl->total_crashes;
 
+      if (unlikely(afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3)) {
+        tmp_sym = afl->fsrv.crash_symbol;
+        tmp_mod = afl->fsrv.crash_module;
+        tmp_ofs = afl->fsrv.crash_offset;
+
+        find_crash_site(afl, 1, 
+          &(afl->fsrv.crash_symbol),
+          &(afl->fsrv.crash_module),
+          &(afl->fsrv.crash_offset));
+
+        if (unlikely((tmp_ofs != afl->fsrv.crash_offset)  
+                ||   (!(tmp_mod && afl->fsrv.crash_module) && 
+                       (tmp_mod || afl->fsrv.crash_module))
+                ||   (tmp_mod && afl->fsrv.crash_module && 
+                      strcmp(tmp_mod, afl->fsrv.crash_module))
+          )) //God damn it!!!!!!
+        { /* We must test for null before strcmp to
+           avoid undefined behavior */
+          ck_free(afl->fsrv.crash_symbol);
+          afl->fsrv.crash_symbol = tmp_sym;
+          ck_free(afl->fsrv.crash_module);
+          afl->fsrv.crash_module = tmp_mod;
+          afl->fsrv.crash_offset = tmp_ofs;
+          return 0; // Crash site changed. Drop it.
+        }
+      }
+
       if (likely(classified)) {
 
         few_bits = has_few_bits(afl, afl->virgin_bits); 
@@ -790,6 +947,25 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
       // `afl->queue_top` is interesting. With calibrate_case run before
       // we have acquired better info and updated those global minimums. 
       // Now it's time to save the detail of current entry.
+      if (unlikely(afl->crash_mode)) {
+        if (unlikely(afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3))
+        {
+          //If arrive here, the crash site should keep same.
+          //So only need to free the tmp ones.
+          ck_free(tmp_sym);
+          ck_free(tmp_mod);
+        }
+        else if (likely(afl->crash_mode < IGORFUZZ_NEW_CRASH_MODE_LV3))
+        {
+          ck_free(afl->fsrv.crash_symbol);
+          ck_free(afl->fsrv.crash_module);
+
+          find_crash_site(afl, 1, 
+            &(afl->fsrv.crash_symbol),
+            &(afl->fsrv.crash_module),
+            &(afl->fsrv.crash_offset));
+        }
+      }
       write_crash_detail(afl, afl->queue_top);
 
       ++afl->saved_crashes;
