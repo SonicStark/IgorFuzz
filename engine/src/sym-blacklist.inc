@@ -1,5 +1,5 @@
-#ifndef _SYM_BLACKLIST_H
-#define _SYM_BLACKLIST_H
+#ifndef _SYM_BLACKLIST_INC
+#define _SYM_BLACKLIST_INC
 
 /* 
   We hope to get ride of ASan stuffs when analysing 
@@ -23,6 +23,7 @@ static const char *sym_blacklist_module[] = {
     "liblsan",
     "libubsan",
     "libclang_rt.",
+    "igorfuzz-rt", //filter afl-igorfuzz-rt.o
     NULL
 
 };
@@ -43,4 +44,4 @@ static const char *sym_blacklist_function[] = {
 
 };
 
-#endif // _SYM_BLACKLIST_H
+#endif // _SYM_BLACKLIST_INC

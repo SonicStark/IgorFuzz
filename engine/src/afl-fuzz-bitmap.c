@@ -29,6 +29,10 @@
   #define NAME_MAX _XOPEN_NAME_MAX
 #endif
 
+#if IGORFUZZ_FEATURE_ENABLE
+  #include "sanitizer_symbolizer_tool.h"
+#endif
+
 /* Write bitmap to file. The bitmap is useful mostly for the secret
    -B option, to focus a separate fuzzing session on a particular
    interesting input without rediscovering all the others. */
@@ -597,7 +601,7 @@ inline u8 has_few_bits(afl_state_t *afl, u8* virgin_map) {
   return ret; // should be in [0x10 , 0x17]
 }
 
-#include "sym-blacklist.h"
+#include "sym-blacklist.inc"
 /**
  * Read call stack file (if exists) generated
  * within __asan_on_error in the target, read
@@ -668,7 +672,7 @@ find_crash_site(afl_state_t *afl, u8 flush,
       if (strstr(module_name, sym_blacklist_module[i]))
         //stack frame on a blocked module and the frames
         //on the top of it all shouldn't be crash site.
-        module_blocked = 1; break;
+        { module_blocked = 1; break; }
     }
     if (module_blocked) {
       //drop anything found previously
@@ -683,7 +687,7 @@ find_crash_site(afl_state_t *afl, u8 flush,
     u8 *func = 0, *f_;  //so many damn stuffs!
     //Symbolize it anyway. We'll check later.
     SanSymTool_addr_send(path_, addr_val, &n_sym);
-    SanSymTool_addr_read(0, &f_, &func, &li_, &co_);
+    SanSymTool_addr_read(0, (char**)(&f_), (char**)(&func), &li_, &co_);
 
     if (n_sym) {
       //If n_sym is non-zero, the module should be likely 
@@ -700,7 +704,7 @@ find_crash_site(afl_state_t *afl, u8 flush,
           if (strstr(func, sym_blacklist_function[i]))
             //stack frames on and on the top of a blocked
             //function all shouldn't be crash site.
-            func_blocked = 1; break;
+            { func_blocked = 1; break; }
         }
         if (func_blocked) {
           //drop anything found previously
@@ -789,7 +793,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
   u8  is_timeout = 0, few_bits = 0; //state store before function return
   u8  res;
 
-  u8 *tmp_sym, *tmp_mod; u32 tmp_ofs; //for new crash mode
+  u8 *tmp_sym = 0, *tmp_mod = 0; u32 tmp_ofs; //for new crash mode
 
   /* Update path frequency. */
 

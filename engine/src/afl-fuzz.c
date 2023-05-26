@@ -45,6 +45,10 @@
 extern u64 time_spent_working;
 #endif
 
+#if IGORFUZZ_FEATURE_ENABLE
+  #include "sanitizer_symbolizer_tool.h"
+#endif
+
 static void at_exit() {
 
   s32   i, pid1 = 0, pid2 = 0, pgrp = -1;
