@@ -274,11 +274,13 @@ ifndef SANSYM_LIB
 endif
 
 SANSYM_CFLAGS  = -I$(dir $(SANSYM_INC))
-SANSYM_LDFLAGS = -L$(dir $(SANSYM_LIB)) -l$(subst lib,,$(basename $(notdir $(SANSYM_LIB))))
-ifneq "$(SYS)" "Darwin"
-  SANSYM_LDFLAGS += -lstdc++
-else
-  SANSYM_LDFLAGS += -lc++
+SANSYM_LDFLAGS = -L$(dir $(SANSYM_LIB)) -l:$(notdir $(SANSYM_LIB))
+ifeq "$(suffix $(SANSYM_LIB))" ".a"
+  ifneq "$(SYS)" "Darwin"
+    SANSYM_LDFLAGS += -lstdc++
+  else
+    SANSYM_LDFLAGS += -lc++
+  endif
 endif
 ##############################
 
