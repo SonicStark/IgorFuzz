@@ -683,7 +683,17 @@ void read_the_testcase(afl_state_t *afl) {
           stringify_mem_size(val_buf[1], sizeof(val_buf[1]), MAX_FILE));
 
   }
-  add_to_queue(afl, afl->in_file, st.st_size >= MAX_FILE ? MAX_FILE : st.st_size, 0);
+
+  /* The main has `argv_orig` as one of its params. afl-fuzz later
+    uses argv_cpy_dup to get `argv` and calls getopt on that. And
+    this damn pointer `afl->in_file` receives its value from `optarg`.
+    After add_to_queue being called there will come pivot_inputs next
+    within main. It will free the old `q->fname`! 
+    So if we pass `afl->in_file` directly to add_to_queue, free will 
+    be applied to somewhere inside `argv`, and finally when argv_cpy_free
+    being called DOUBLE-FREE happens. wtf! */
+  u8 *used_fn = ck_strdup(afl->in_file);
+  add_to_queue(afl, used_fn, st.st_size >= MAX_FILE ? MAX_FILE : st.st_size, 0);
 
   if (unlikely(afl->shm.cmplog_mode)) {
     if (afl->cmplog_lvl == 1) {
