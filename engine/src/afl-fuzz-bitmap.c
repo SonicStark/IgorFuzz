@@ -773,6 +773,76 @@ write_crash_detail(afl_state_t *afl, struct queue_entry *q) {
 }
 
 /**
+ * Compare current crash site with testcase matrix.
+ * 
+ * @param q It can be NULL, which makes *detail* and *discard*
+ * don't take any effect.
+ * @param detail If not 0, call write_crash_detail 
+ * when crash site is different.
+ * @param discard If not 0, will mark `q` as disabled in queue
+ * when crash site is different.
+ * @return 1 for same. 0 for different.
+*/
+u8 __attribute__((hot))
+same_crash_site(afl_state_t *afl, struct queue_entry *q, u8 detail, u8 discard) {
+  u8 is_same = 0;
+
+  u8 *tmp_sym = afl->fsrv.crash_symbol;
+  u8 *tmp_mod = afl->fsrv.crash_module;
+  u32 tmp_ofs = afl->fsrv.crash_offset;
+
+  find_crash_site(afl, 1, 
+    &(afl->fsrv.crash_symbol),
+    &(afl->fsrv.crash_module),
+    &(afl->fsrv.crash_offset));
+
+  if (unlikely((tmp_ofs != afl->fsrv.crash_offset)
+                /* if one is null and the other not */
+          ||   (!(tmp_mod && afl->fsrv.crash_module) && 
+                  (tmp_mod || afl->fsrv.crash_module))
+                /* We must test for null before strcmp
+                  to avoid undefined behavior */
+          ||   (tmp_mod && afl->fsrv.crash_module && 
+                strcmp(tmp_mod, afl->fsrv.crash_module))
+    )) //God damn it!!!!!!
+  { is_same = 0; } else { is_same = 1; }
+
+  if (likely(is_same)) {
+
+    // Just keep the new allocated and
+    // free the old ones for convenience.
+    ck_free(tmp_sym);
+    ck_free(tmp_mod);
+
+  } else {
+
+    if (q) {
+      if (detail) {
+        write_crash_detail(afl, q);
+      }
+      if (discard) {
+        q->disabled = 1;
+        q->perf_score = 0;
+        if (!q->was_fuzzed) {
+          q->was_fuzzed = 1;
+          --afl->pending_not_fuzzed;
+          --afl->active_items;
+        }
+      }
+    } // if (q)
+
+    ck_free(afl->fsrv.crash_symbol);
+    afl->fsrv.crash_symbol = tmp_sym;
+    ck_free(afl->fsrv.crash_module);
+    afl->fsrv.crash_module = tmp_mod;
+    afl->fsrv.crash_offset = tmp_ofs;
+
+  }
+
+  return is_same;
+}
+
+/**
  * Check if the result of an execve() during routine fuzzing is interesting.
  * Save or queue the input test case for further analysis if so.
  * 
@@ -792,8 +862,6 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
   u8  classified = 0; u64 cksum = 0; //help afl->schedule
   u8  is_timeout = 0, few_bits = 0; //state store before function return
   u8  res;
-
-  u8 *tmp_sym = 0, *tmp_mod = 0; u32 tmp_ofs; //for new crash mode
 
   /* Update path frequency. */
 
@@ -873,30 +941,8 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
       ++afl->total_crashes;
 
       if (unlikely(afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3)) {
-        tmp_sym = afl->fsrv.crash_symbol;
-        tmp_mod = afl->fsrv.crash_module;
-        tmp_ofs = afl->fsrv.crash_offset;
-
-        find_crash_site(afl, 1, 
-          &(afl->fsrv.crash_symbol),
-          &(afl->fsrv.crash_module),
-          &(afl->fsrv.crash_offset));
-
-        if (unlikely((tmp_ofs != afl->fsrv.crash_offset)  
-                ||   (!(tmp_mod && afl->fsrv.crash_module) && 
-                       (tmp_mod || afl->fsrv.crash_module))
-                ||   (tmp_mod && afl->fsrv.crash_module && 
-                      strcmp(tmp_mod, afl->fsrv.crash_module))
-          )) //God damn it!!!!!!
-        { /* We must test for null before strcmp to
-           avoid undefined behavior */
-          ck_free(afl->fsrv.crash_symbol);
-          afl->fsrv.crash_symbol = tmp_sym;
-          ck_free(afl->fsrv.crash_module);
-          afl->fsrv.crash_module = tmp_mod;
-          afl->fsrv.crash_offset = tmp_ofs;
-          return 0; // Crash site changed. Drop it.
-        }
+        if (unlikely(!same_crash_site(afl, NULL, 0, 0)))
+          return 0; // Crash site changed. Discard this case.
       }
 
       if (likely(classified)) {
@@ -951,13 +997,15 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
       // `afl->queue_top` is interesting. With calibrate_case run before
       // we have acquired better info and updated those global minimums. 
       // Now it's time to save the detail of current entry.
+      u8 crash_detail_saved = 0;
       if (unlikely(afl->crash_mode)) {
         if (unlikely(afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3))
         {
           //If arrive here, the crash site should keep same.
-          //So only need to free the tmp ones.
-          ck_free(tmp_sym);
-          ck_free(tmp_mod);
+          //However we still do double check in case it changed
+          //because the testcase has been calibrated before.
+          crash_detail_saved = 
+            same_crash_site(afl, afl->queue_top, 1, 0) ? 0 : 1;
         }
         else if (likely(afl->crash_mode < IGORFUZZ_NEW_CRASH_MODE_LV3))
         {
@@ -970,7 +1018,8 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
             &(afl->fsrv.crash_offset));
         }
       }
-      write_crash_detail(afl, afl->queue_top);
+      if (likely(!crash_detail_saved))
+        write_crash_detail(afl, afl->queue_top);
 
       ++afl->saved_crashes;
 

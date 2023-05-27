@@ -1249,21 +1249,8 @@ void perform_dry_run(afl_state_t *afl) {
     }
     else if (afl->crash_mode >= IGORFUZZ_NEW_CRASH_MODE_LV3)
     {
-      u8 *tmp_sym = afl->fsrv.crash_symbol;
-      u8 *tmp_mod = afl->fsrv.crash_module;
-      u32 tmp_ofs = afl->fsrv.crash_offset;
-      find_crash_site(afl, 1, 
-        &(afl->fsrv.crash_symbol),
-        &(afl->fsrv.crash_module),
-        &(afl->fsrv.crash_offset));
-
-      write_crash_detail(afl, q);
-
-      ck_free(afl->fsrv.crash_symbol);
-      afl->fsrv.crash_symbol = tmp_sym;
-      ck_free(afl->fsrv.crash_module);
-      afl->fsrv.crash_module = tmp_mod;
-      afl->fsrv.crash_offset = tmp_ofs;
+      if(same_crash_site(afl, q, 1, 1))
+        write_crash_detail(afl, q);
     }
     else
     {
