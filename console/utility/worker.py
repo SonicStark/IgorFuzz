@@ -4,6 +4,8 @@ import subprocess
 import multiprocessing.pool
 
 TIMEOUT_KILL_CODE = int(b"TIME".hex(), 16)
+STOP_FUZZING_CODE = int(b"STOP".hex(), 16)
+FAIL_FUZZING_CODE = int(b"FAIL".hex(), 16)
 
 class ParallelWorker(multiprocessing.pool.ThreadPool):
     """ Parallel Worker Interface
@@ -136,4 +138,56 @@ class ParallelWorker(multiprocessing.pool.ThreadPool):
                         return (p_.returncode, bout, berr)
                 ###############################################
         
+        return job_function
+
+class AmericanFuzzyLopWorker(ParallelWorker):
+    """ Parallel Worker Interface for AFL
+    """
+    def generate_job(self, 
+        args_append :typing.Dict[int,str], 
+        fuzzing_sec :int,
+        timeout_sec :int
+    ) -> typing.Callable[[],tuple]:
+        """ Return a function without args as job for a AFL worker
+
+        https://stackoverflow.com/questions/2760652/how-to-kill-or-avoid-zombie-processes-with-subprocess-module
+        The python runtime takes responsibility for getting rid of zombie process
+        once their process objects have been garbage collected. 
+
+        Parameters
+        ----------
+        args_append:
+            Will be merged with a copy of `args_common` as a supplement.
+            The merged one will be used for building the final list, and 
+            the existing args in `args_common` will be overwritten in it.
+        fuzzing_sec:
+            Send SIGTERM to AFL process after `fuzzing_sec` seconds.
+            AFL then will know we say "stop" and go to "stop_fuzzing".
+        timeout_sec:
+            Send SIGKILL to AFL if it can't exit within `timeout_sec`
+            seconds after we send SIGTERM.
+        """
+        args_final = {}
+        args_final.update(self.args_common)
+        args_final.update(args_append)
+        arg_idx = sorted(args_final.keys())
+        # Normalize: force POSIX style
+        arg_lst = shlex.split(" ".join( [args_final[i] for i in arg_idx] ))
+
+        def job_function():
+            p_ = subprocess.Popen(arg_lst, shell=False)
+            try:
+                p_.wait(timeout=fuzzing_sec)
+            except subprocess.TimeoutExpired:
+                p_.terminate()
+                try:
+                    p_.wait(timeout=timeout_sec)
+                except subprocess.TimeoutExpired:
+                    p_.kill()
+                    return (FAIL_FUZZING_CODE,)
+                else:
+                    return (STOP_FUZZING_CODE,)
+            else:
+                return (p_.returncode,)
+
         return job_function
