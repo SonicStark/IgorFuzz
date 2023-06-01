@@ -1,0 +1,14 @@
+diff --git a/Original/include/config.h b/IgorFuzz/include/config.h
+index 973bbcb..f964842 100755
+--- a/Original/include/config.h
++++ b/IgorFuzz/include/config.h
+@@ -450,5 +450,9 @@
+ 
+ #define AFL_TXT_STRING_MAX_MUTATIONS 6
+ 
++/* The percentage of bitmap_size that we can tolerate when calculate favorite*/
++
++#define TOLERATE_BITMAP_PERCENT 1.2
++
+ #endif                                                  /* ! _HAVE_CONFIG_H */
+ 

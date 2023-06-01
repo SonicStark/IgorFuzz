@@ -1,0 +1,30 @@
+diff --git a/Original/include/coverage-64.h b/IgorFuzz/include/coverage-64.h
+index 0ede5fa..d123d52 100755
+--- a/Original/include/coverage-64.h
++++ b/IgorFuzz/include/coverage-64.h
+@@ -5,6 +5,8 @@
+   #include <immintrin.h>
+ #endif
+ 
++extern u64 cur_hit_count;
++
+ u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end);
+ u64 classify_word(u64 word);
+ 
+@@ -12,7 +14,7 @@ inline u64 classify_word(u64 word) {
+ 
+   u16 mem16[4];
+   memcpy(mem16, &word, sizeof(mem16));
+-
++  cur_hit_count += mem16[0] + mem16[1] + mem16[2] + mem16[3];
+   mem16[0] = count_class_lookup16[mem16[0]];
+   mem16[1] = count_class_lookup16[mem16[1]];
+   mem16[2] = count_class_lookup16[mem16[2]];
+@@ -59,6 +61,7 @@ inline void classify_counts(afl_forkserver_t *fsrv) {
+ 
+   u64 *mem = (u64 *)fsrv->trace_bits;
+   u32  i = (fsrv->map_size >> 3);
++  cur_hit_count = 0;
+ 
+   while (i--) {
+ 

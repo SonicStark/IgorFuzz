@@ -1,0 +1,33 @@
+diff --git a/Original/include/coverage-32.h b/IgorFuzz/include/coverage-32.h
+index a5cc498..a1e59bc 100755
+--- a/Original/include/coverage-32.h
++++ b/IgorFuzz/include/coverage-32.h
+@@ -1,14 +1,18 @@
+ #include "config.h"
+ #include "types.h"
+ 
++extern u64 cur_hit_count;
++
+ u32 skim(const u32 *virgin, const u32 *current, const u32 *current_end);
+ u32 classify_word(u32 word);
+ 
++/* while classify counts buy bucket, sum hitcount */
++
+ inline u32 classify_word(u32 word) {
+ 
+   u16 mem16[2];
+   memcpy(mem16, &word, sizeof(mem16));
+-
++  cur_hit_count += mem16[0] + mem16[1];
+   mem16[0] = count_class_lookup16[mem16[0]];
+   mem16[1] = count_class_lookup16[mem16[1]];
+ 
+@@ -45,6 +49,8 @@ void simplify_trace(afl_state_t *afl, u8 *bytes) {
+ 
+ }
+ 
++
++
+ inline void classify_counts(afl_forkserver_t *fsrv) {
+ 
+   u32 *mem = (u32 *)fsrv->trace_bits;

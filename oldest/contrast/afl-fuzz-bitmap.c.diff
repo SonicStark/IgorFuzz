@@ -1,0 +1,326 @@
+diff --git a/Original/src/afl-fuzz-bitmap.c b/IgorFuzz/src/afl-fuzz-bitmap.c
+index 586f399..4887bd0 100755
+--- a/Original/src/afl-fuzz-bitmap.c
++++ b/IgorFuzz/src/afl-fuzz-bitmap.c
+@@ -29,6 +29,13 @@
+   #define NAME_MAX _XOPEN_NAME_MAX
+ #endif
+ 
++u64 global_min_hit_count = UINT64_MAX;      /* The minimal sum of hits on edges for all cases */
++
++u64 cur_hit_count;
++
++u8 *trace_mini_ori;
++u8 *original_virgin_bits;
++
+ /* Write bitmap to file. The bitmap is useful mostly for the secret
+    -B option, to focus a separate fuzzing session on a particular
+    interesting input without rediscovering all the others. */
+@@ -236,6 +243,7 @@ inline u8 has_new_bits(afl_state_t *afl, u8 *virgin_map) {
+ #endif                                                     /* ^WORD_SIZE_64 */
+ 
+   u8 ret = 0;
++
+   while (i--) {
+ 
+     if (unlikely(*current)) discover_word(&ret, current, virgin);
+@@ -283,6 +291,189 @@ inline u8 has_new_bits_unclassified(afl_state_t *afl, u8 *virgin_map) {
+ 
+ }
+ 
++/* Check if the current execution path brings anything shorter to the table.
++   Update virgin bits to reflect the finds. Returns 1 if the only change is
++   the hit-count for a particular tuple; 2 if there are tuples disappear.
++   Updates the map, so subsequent calls will always return 0.
++   This function is called after every exec() on a fairly large buffer, so
++   it needs to be fast. We do this in 32-bit and 64-bit flavors.
++   ret == 1 ----> we detect different hit count on certain edge
++   ret == 2 ----> we detect coverage increase
++   ret == 3 ----> we detect coverage decrease
++   ret == 4 ----> we detect bitmap_size decrease
++   */
++
++inline u8 has_few_bits(afl_state_t *afl, u8* virgin_map) {
++    u8 bms_decrease = 0; // whether bitmap size gets decreased
++    u8 cov_decrease = 0; // whether at least one edge is no longer hit in current seed
++    u8 hcn_decrease = 0; // whether the total hit counts gets decreased
++
++#ifdef WORD_SIZE_64
++
++    u64* current = (u64*)afl->fsrv.trace_bits;
++    u64* virgin  = (u64*)virgin_map;
++
++    u32  i =  (afl->fsrv.map_size >> 3);
++
++#else
++
++    u32* current = (u32*)afl->fsrv.trace_bits;
++    u32* virgin  = (u32*)virgin_map;
++
++    u32  i =  (afl->fsrv.map_size >> 2);
++
++#endif /* ^WORD_SIZE_64 */
++
++    u8   ret = 0;
++
++    // initialize virgin_bits & total_min_bitmap_size & global_min_hit_count
++    if (unlikely(afl->total_min_bitmap_size == 0) && unlikely(global_min_hit_count + 1 == 0x0)) {
++        /* Initialize total_min_bitmap_size */
++        u64 cur_bitmap_size;
++
++        // initialize total_min_bitmap_size with cur_bitmap_size
++        cur_bitmap_size = count_bytes(afl, afl->fsrv.trace_bits);
++        afl->total_min_bitmap_size = cur_bitmap_size;
++
++        /* Initialize global_min_hit_count */
++        global_min_hit_count = cur_hit_count;
++
++        // initialize virgin_bits
++        while (i--) {
++
++            if (unlikely(*current)) discover_word(&ret, current, virgin);
++
++            current++;
++            virgin++;
++
++        }
++
++        if (unlikely(ret) && likely(virgin_map == afl->virgin_bits))
++            afl->bitmap_changed = 1;
++
++        original_virgin_bits = afl->virgin_bits;  // initialize original_virgin_bits
++
++        u32 len = (afl->fsrv.map_size >> 3);
++        trace_mini_ori = ck_alloc(len);
++        minimize_bits(afl, trace_mini_ori, afl->fsrv.trace_bits); // initialize trace_mini_ori
++
++        return ret;
++    } // initialize virgin_bits finished
++
++    /* STEP 1: check bitmap size */
++    u64 cur_bitmap_size;
++
++    cur_bitmap_size = count_bytes(afl, afl->fsrv.trace_bits);
++    if (likely(afl->total_min_bitmap_size)) {
++        // compare current bitmap_size with the global minimum bitmap_size that we have ever seen
++        if (cur_bitmap_size < afl->total_min_bitmap_size) {
++            // update total_min_bitmap_size with smaller one
++            afl->total_min_bitmap_size = cur_bitmap_size;
++
++            bms_decrease = 1;   // bitmap_size decreased!
++        } else {}
++    }
++
++
++    /* STEP 2: check whether there is edge that no longer be hit */
++    while (i--) {
++
++        if (unlikely(*virgin + 1 != 0x0) && unlikely(*virgin & *current)) {
++            // (*virgin + 1 != 0x0) means there is at least one path is hit in original bitmap
++            // non-zero (*virgin & *current)
++            // means the hit count between virgin and current is different
++
++
++            u8* cur = (u8*)current;
++            u8* vir = (u8*)virgin;
++
++#ifdef WORD_SIZE_64
++
++                if ((vir[0] != 0xff && cur[0] == 0x0) || (vir[1] != 0xff && cur[1] == 0x0) ||
++                    (vir[2] != 0xff && cur[2] == 0x0) || (vir[3] != 0xff && cur[3] == 0x0) ||
++                    (vir[4] != 0xff && cur[4] == 0x0) || (vir[5] != 0xff && cur[5] == 0x0) ||
++                    (vir[6] != 0xff && cur[6] == 0x0) || (vir[7] != 0xff && cur[7] == 0x0)) {
++                    // if there is a touched byte being untouched now
++                    // it will mean there is a path disappeared
++                    // update virgin_bits here!
++                    if (vir[0] != 0xff && cur[0] == 0x0) {*((u8*)(virgin)+0) = 0xff;}
++                    if (vir[1] != 0xff && cur[1] == 0x0) {*((u8*)(virgin)+1) = 0xff;}
++                    if (vir[2] != 0xff && cur[2] == 0x0) {*((u8*)(virgin)+2) = 0xff;}
++                    if (vir[3] != 0xff && cur[3] == 0x0) {*((u8*)(virgin)+3) = 0xff;}
++                    if (vir[4] != 0xff && cur[4] == 0x0) {*((u8*)(virgin)+4) = 0xff;}
++                    if (vir[5] != 0xff && cur[5] == 0x0) {*((u8*)(virgin)+5) = 0xff;}
++                    if (vir[6] != 0xff && cur[6] == 0x0) {*((u8*)(virgin)+6) = 0xff;}
++                    if (vir[7] != 0xff && cur[7] == 0x0) {*((u8*)(virgin)+7) = 0xff;}
++
++                    cov_decrease = 1;    // coverage decreased!
++                }
++                if(unlikely(cur_hit_count < global_min_hit_count)) {
++                // we only want to save the seed whose cur_hit_count is smaller than global min
++                /* if we arrive this branch, means same bitmap_size, no global necessary edge was removed
++                 * we have 2 kind of situations in this branch
++                 * One: different hit count for at least one edge
++                 * two: new edge was hit compared with virgin
++                 *
++                 * we won't update virgin
++                 */
++                global_min_hit_count = cur_hit_count;
++                hcn_decrease = 1; // hit count sum decrease
++            } else {}
++
++#else
++            if ((vir[0] != 0xff && cur[0] == 0x0) || (vir[1] != 0xff && cur[1] == 0x0) ||
++                (vir[2] != 0xff && cur[2] == 0x0) || (vir[3] != 0xff && cur[3] == 0x0)) {
++                // if there is a touched byte being untouched now
++                // it will mean there is a path disappeared
++                // update virgin_bits here!
++                if (vir[0] != 0xff && cur[0] == 0x0) {*((u8*)(virgin)+0) = 0xff;}
++                if (vir[1] != 0xff && cur[1] == 0x0) {*((u8*)(virgin)+1) = 0xff;}
++                if (vir[2] != 0xff && cur[2] == 0x0) {*((u8*)(virgin)+2) = 0xff;}
++                if (vir[3] != 0xff && cur[3] == 0x0) {*((u8*)(virgin)+3) = 0xff;}
++
++                cov_decrease = 1;    // coverage decreased!
++
++            }
++            /* STEP 3: check total hit counts */
++            if(unlikely(cur_hit_count < global_min_hit_count)) {
++                /* if we arrive this branch, means same bitmap_size, no global necessary edge was removed
++                 * we have 2 kind of situations in this branch
++                 * One: different hit count for at least one edge
++                 * two: new edge was hit compared with virgin
++                 *
++                 * we won't update virgin
++                 */
++                global_min_hit_count = cur_hit_count;
++                hcn_decrease = 1; // hit count sum decrease
++            } else {}
++
++#endif /* ^WORD_SIZE_64 */
++
++        }
++
++        current++;
++        virgin++;
++
++    }
++
++    if (cov_decrease) afl->bitmap_changed = 1;
++
++    // bms cov hcn         ret
++    // 1   1   1    ---->   7
++    // 1   1   0    ---->   6
++    // 1   0   1    ---->   5
++    // 1   0   0    ---->   4
++    // 0   1   1    ---->   3
++    // 0   1   0    ---->   2
++    // 0   0   1    ---->   1
++
++    ret = bms_decrease * 4 + cov_decrease * 2 + hcn_decrease * 1;
++
++    return ret;
++
++}
++
++
+ /* Compact trace bytes into a smaller bitmap. We effectively just drop the
+    count information here. This is called only sporadically, for some
+    new paths. */
+@@ -383,9 +574,25 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
+ 
+   }
+ 
+-  if (new_bits == 2) { strcat(ret, ",+cov"); }
+-
+-  if (unlikely(strlen(ret) >= max_description_len))
++    // bms cov hcn         ret
++    // 1   1   1    ---->   7
++    // 1   1   0    ---->   6
++    // 1   0   1    ---->   5
++    // 1   0   0    ---->   4
++    // 0   1   1    ---->   3
++    // 0   1   0    ---->   2
++    // 0   0   1    ---->   1
++
++  if (new_bits == 1) { strcat(ret, ",-hcn"); }
++  else if (new_bits == 2) { strcat(ret, ",-cov"); }
++  else if (new_bits == 3) { strcat(ret, ",-cov_hcn"); }
++  else if (new_bits == 4) { strcat(ret, ",-bms"); }
++  else if (new_bits == 5) { strcat(ret, ",-bms_hcn"); }
++  else if (new_bits == 6) { strcat(ret, ",-bms_cov"); }
++  else if (new_bits == 7) { strcat(ret, ",-bms_cov_hcn"); }
++  else {}
++
++    if (unlikely(strlen(ret) >= max_description_len))
+     FATAL("describe string is too long");
+ 
+   return ret;
+@@ -459,7 +666,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+   if (unlikely(len == 0)) { return 0; }
+ 
+   u8 *queue_fn = "";
+-  u8  new_bits = '\0';
++  u8  few_bits = '\0';
+   s32 fd;
+   u8  keeping = 0, res, classified = 0;
+   u64 cksum = 0;
+@@ -482,25 +689,35 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+ 
+   if (likely(fault == afl->crash_mode)) {
+ 
+-    /* Keep only if there are new bits in the map, add to queue for
+-       future fuzzing, etc. */
++    /* Keep if there are few bits in the map. 
++    Keep if hit count is less than min hit count too.
++    If hit count is more than min, keep it at a probability depending on the distance to min.
++    Add to queue for future fuzzing, etc. */
++    classify_counts(&afl->fsrv);
++    few_bits = has_few_bits(afl, afl->virgin_bits);
+ 
+-    new_bits = has_new_bits_unclassified(afl, afl->virgin_bits);
++    if (likely(!few_bits)) {
+ 
+-    if (likely(!new_bits)) {
+-
+-      if (unlikely(afl->crash_mode)) { ++afl->total_crashes; }
+-      return 0;
++      return 0; // there are no few bits
+ 
+     }
++    else if(likely(few_bits == 1)){
++      if(unlikely(cur_hit_count < global_min_hit_count)){}
++      else {
++        if(cur_hit_count-global_min_hit_count > R(global_min_hit_count / 2)) return 0;
++        /* 0.5*min is the upper limit of cur - min. 
++        If cur - min<0.5*min, A linear probability decides whether we keep the case or not.
++        0.5 needs to be adjust. */
++      }
++    }
+ 
+-    classified = new_bits;
++    classified = few_bits;
+ 
+ #ifndef SIMPLE_FILES
+ 
+     queue_fn = alloc_printf(
+         "%s/queue/id:%06u,%s", afl->out_dir, afl->queued_paths,
+-        describe_op(afl, new_bits, NAME_MAX - strlen("id:000000,")));
++        describe_op(afl, few_bits, NAME_MAX - strlen("id:000000,")));
+ 
+ #else
+ 
+@@ -543,7 +760,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+ 
+ #endif
+ 
+-    if (new_bits == 2) {
++    if (few_bits == 2) {
+ 
+       afl->queue_top->has_new_cov = 1;
+       ++afl->queued_with_cov;
+@@ -608,7 +825,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+ 
+         simplify_trace(afl, afl->fsrv.trace_bits);
+ 
+-        if (!has_new_bits(afl, afl->virgin_tmout)) { return keeping; }
++        if (!has_few_bits(afl, afl->virgin_tmout)) { return keeping; }
+ 
+       }
+ 
+@@ -708,7 +925,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+ 
+         simplify_trace(afl, afl->fsrv.trace_bits);
+ 
+-        if (!has_new_bits(afl, afl->virgin_crash)) { return keeping; }
++        if (!has_few_bits(afl, afl->virgin_crash)) { return keeping; }
+ 
+       }
+ 

@@ -1,0 +1,41 @@
+diff --git a/Original/include/afl-fuzz.h b/IgorFuzz/include/afl-fuzz.h
+index 6342c8b..83203bf 100755
+--- a/Original/include/afl-fuzz.h
++++ b/IgorFuzz/include/afl-fuzz.h
+@@ -141,6 +141,9 @@ extern s16 interesting_16[INTERESTING_8_LEN + INTERESTING_16_LEN];
+ extern s32
+     interesting_32[INTERESTING_8_LEN + INTERESTING_16_LEN + INTERESTING_32_LEN];
+ 
++extern u8 *trace_mini_ori;                   /* Trace bytes of decrease fuzzer's original poc, if kept */
++extern u8 *original_virgin_bits;            /* Regions yet untouched by fuzzing  for the original poc */
++
+ struct queue_entry {
+ 
+   u8 *fname;                            /* File name for the test case      */
+@@ -510,7 +513,8 @@ typedef struct afl_state {
+ 
+   u8 *virgin_bits,                      /* Regions yet untouched by fuzzing */
+       *virgin_tmout,                    /* Bits we haven't seen in tmouts   */
+-      *virgin_crash;                    /* Bits we haven't seen in crashes  */
++      *virgin_crash,                    /* Bits we haven't seen in crashes  */
++      *cut_virgin_bits;                 /* Edges that were pruned by decrease fuzzer already */
+ 
+   double *alias_probability;            /* alias weighted probabilities     */
+   u32 *   alias_table;                /* alias weighted random lookup table */
+@@ -595,6 +599,8 @@ typedef struct afl_state {
+ 
+   u64 total_bitmap_size,                /* Total bit count for all bitmaps  */
+       total_bitmap_entries;             /* Number of bitmaps counted        */
++  
++  u64 total_min_bitmap_size;            /* The minimal bitmap_size for all cases */
+ 
+   s32 cpu_core_count,                   /* CPU core count                   */
+       cpu_to_bind;                      /* bind to specific CPU             */
+@@ -1037,6 +1043,7 @@ u8 *describe_op(afl_state_t *, u8, size_t);
+ u8 save_if_interesting(afl_state_t *, void *, u32, u8);
+ u8 has_new_bits(afl_state_t *, u8 *);
+ u8 has_new_bits_unclassified(afl_state_t *, u8 *);
++u8 has_few_bits(afl_state_t *, u8 *);
+ 
+ /* Extras */
+ 
