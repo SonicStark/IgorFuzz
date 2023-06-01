@@ -1,0 +1,25 @@
+# To find real crash site
+
+BLOCKED_FUNCTION:
+    - '__sanitizer'
+    - '__asan'
+    - '__interceptor'
+    - '__interception'
+    - '__lsan'
+    - '__sancov'
+    - '__ubsan'
+    - '__local_asan_preinit'
+    - '__local_lsan_preinit'
+    - '__afl'
+    - '__hwasan'
+    - '__msan'
+    - '__dfsan'
+    - '__dfsw'
+
+BLOCKED_MODULE:
+    - 'libasan'
+    - 'liblsan'
+    - 'libubsan'
+    - 'libtsan'
+    - 'libclang_rt.'
+    - 'igorfuzz-rt'

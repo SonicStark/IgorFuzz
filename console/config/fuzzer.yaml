@@ -1,0 +1,16 @@
+# For AFL++ default behavior
+
+# All options will be concatenated then
+# normalized by shlex before subprocess.Popen
+AFL_OPTIONS:
+    - '-D'
+    - '-C -C' #Use new Crash Exploration Mode (LV2)
+    - '-m none'
+
+AFL_ENVIRON:
+    AFL_QUIET: 1
+    AFL_NO_UI: 1
+
+AFL_BIN_PATH: 'engine/afl-fuzz'
+
+IGORFUZZ_TOOLPATH: '/usr/bin/llvm-symbolizer-12'

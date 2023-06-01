@@ -1,7 +1,21 @@
 import os
 import re
 import typing
+
 from .log import GIVE_MY_LOGGER
+from ..config import PROJECT_ROOT
+
+def check_real_path(path :str) -> str:
+    """ To obtain the real path
+
+    If an absolute path, return as-is.
+    Otherwise treat it as relative to project root
+    and return its complete path.
+    """
+    if os.path.isabs(path):
+        return path
+    else:
+        return os.path.join(PROJECT_ROOT, path)
 
 def check_where_this_script_is(pass__file__here) -> str:
     """ Return absolute path of the directory where the current file is located

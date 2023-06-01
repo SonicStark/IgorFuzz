@@ -3,11 +3,12 @@ import sys
 import time
 import logging
 
+from ..config import PROJECT_ROOT
 from ..config import CONFIG_BASIC
 
 DEFAULT_LOG_LEVEL = logging.INFO
 
-def GIVE_MY_LOGGER(name :str ="IgorFuzz_console") -> logging.Logger:
+def GIVE_MY_LOGGER(name :str ="IgorFuzzConsole") -> logging.Logger:
     """
     https://docs.python.org/3.8/library/logging.html#logging.getLogger
 
@@ -26,8 +27,11 @@ def GIVE_MY_LOGGER(name :str ="IgorFuzz_console") -> logging.Logger:
         LGR.addHandler(SCN)
 
         if (0 != len(CONFIG_BASIC["DIR_SAVELOGS"])):
-            lname = time.strftime("TConsole-%y-%m-%d-%H-%M-%S.log", time.localtime())
-            FIL = logging.FileHandler(os.path.join(CONFIG_BASIC["DIR_SAVELOGS"], lname))
+            lpath = CONFIG_BASIC["DIR_SAVELOGS"]
+            lname = time.strftime("IgorFuzzConsole-%y-%m-%d-%H-%M-%S.log", time.localtime())
+            FIL = logging.FileHandler(
+                os.path.join(lpath, lname) if os.path.isabs(lpath) else \
+                os.path.join(PROJECT_ROOT, lpath, lname))
             FIL.setFormatter(FMT)
             LGR.addHandler(FIL)
 
