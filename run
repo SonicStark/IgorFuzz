@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+
+# Wrapper script for one click start
+from console.run import run
+run()
