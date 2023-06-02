@@ -330,7 +330,7 @@ void write_stats_file(afl_state_t *afl, u32 t_bytes, double bitmap_cvg,
       afl->non_instrumented_mode ? " non_instrumented " : "",
       afl->no_forkserver ? "no_fsrv " : "",
 #if IGORFUZZ_FEATURE_ENABLE
-      "igor",
+      "igor ",
 #else
       afl->crash_mode ? "crash " : "",
 #endif
