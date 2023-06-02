@@ -1,5 +1,7 @@
 # For AFL++ default behavior
 
+AFL_BIN_PATH: 'engine/afl-fuzz'
+
 # All options will be concatenated then
 # normalized by shlex before subprocess.Popen
 AFL_OPTIONS:
@@ -11,9 +13,15 @@ AFL_ENVIRON:
     AFL_QUIET: 1
     AFL_NO_UI: 1
 
-AFL_BIN_PATH: 'engine/afl-fuzz'
+IGOR_EKEY_TOOL: 'IGORFUZZ_TOOLPATH'
+IGOR_EVAL_TOOL: '/usr/bin/llvm-symbolizer-12'
 
-IGORFUZZ_DEFAULT_TIM_FUZZ: 1200 #20 min, in sec. Run 1 instance of IgorFuzz for hours isn't a good idea!
-IGORFUZZ_DEFAULT_TIM_WAIT: 20   #wait at most 20 secs after SIGTERM
+IGOR_DEFAULT_MAX_POOL: 16   #max num of concurrent IgorFuzz processes
+IGOR_DEFAULT_TIM_SHOW: 60   #time interval between each check of those "fuzzer_stats" (in sec.)
+IGOR_DEFAULT_TIM_WORK: 1200 #20 min, in sec. Run 1 instance of IgorFuzz for hours isn't a good idea!
+IGOR_DEFAULT_TIM_WAIT: 20   #wait at most 20 secs after SIGTERM
 
-IGORFUZZ_TOOLPATH: '/usr/bin/llvm-symbolizer-12'
+IGOR_SYNC_ID: 'default' #since AFL++ use `afl->sync_id = ck_strdup("default")`
+
+IGOR_PH_FILE: '_@_FILE_@_'
+IGOR_PH_UNIQ: '_@_UNIQ_@_'

@@ -11,6 +11,9 @@
 # > | NOTSET   |   0   |
 LOG_LEVEL: 10
 
+DEFAULT_MAX_POOL: 4 #in sec.
+DEFAULT_TIM_SHOW: 2 #in sec.
+
 ### MUST USE ABS PATH OR PATH RELATIVE TO IgorFuzz ROOT DIRECTORY ###
 
 DIR_SAVELOGS: 'logs' #Empty string means not save logs to file.
