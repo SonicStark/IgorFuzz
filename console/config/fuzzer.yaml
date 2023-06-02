@@ -13,4 +13,7 @@ AFL_ENVIRON:
 
 AFL_BIN_PATH: 'engine/afl-fuzz'
 
+IGORFUZZ_DEFAULT_TIM_FUZZ: 1200 #20 min, in sec. Run 1 instance of IgorFuzz for hours isn't a good idea!
+IGORFUZZ_DEFAULT_TIM_WAIT: 20   #wait at most 20 secs after SIGTERM
+
 IGORFUZZ_TOOLPATH: '/usr/bin/llvm-symbolizer-12'
