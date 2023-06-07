@@ -667,13 +667,20 @@ find_crash_site(afl_state_t *afl, u8 flush,
     //check if it is a blocked module
     u8  module_blocked = 0;
     u8 *module_name = strrchr(path_, '/');
-    if (!module_name) module_name = path_;
+    if (unlikely(!module_name)) module_name = path_;
+    //stack frame on a blocked module and the frames
+    //on the top of it all shouldn't be crash site.
+#if IGORFUZZ_CALLSTACK_EXACT_MODULE
+    u8 *module_this = strrchr(afl->fsrv.target_path, '/');
+    if (unlikely(!module_this)) module_this = afl->fsrv.target_path;
+    if (unlikely(strcmp(module_this, module_name)))
+      module_blocked = 1;
+#else
     for (int i=0; sym_blacklist_module[i] != NULL; ++i) {
       if (strstr(module_name, sym_blacklist_module[i]))
-        //stack frame on a blocked module and the frames
-        //on the top of it all shouldn't be crash site.
         { module_blocked = 1; break; }
     }
+#endif
     if (module_blocked) {
       //drop anything found previously
       ck_free(*symbol); *symbol = 0; //ck_free allows NULL input
