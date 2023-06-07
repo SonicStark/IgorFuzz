@@ -12,6 +12,9 @@ AFL_OPTIONS:
 AFL_ENVIRON:
     AFL_QUIET: 1
     AFL_NO_UI: 1
+    #skip cpu-binding to avoid unexpeced crash
+    AFL_NO_AFFINITY: 1
+    AFL_SKIP_CPUFREQ: 1
 
 IGOR_EKEY_TOOL: 'IGORFUZZ_TOOLPATH'
 IGOR_EVAL_TOOL: '/usr/bin/llvm-symbolizer-12'
